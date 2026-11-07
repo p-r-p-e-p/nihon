@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="shisan/SubBanner.png" alt="nihon" width="720">
+  <img src="assets/SubBanner.png" alt="nihon" width="720">
 </p>
 
 # Nihon
