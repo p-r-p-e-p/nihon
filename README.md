@@ -1,161 +1,44 @@
-<p align="center">
-  <img src="assets/SubBanner.png" alt="Nihon — a Japanese-script systems programming language" width="720">
-</p>
+# Nihon for VS Code
 
-<h1 align="center">Nihon</h1>
+Language support for **Nihon**, a Rust-style programming language written in kanji, hiragana and katakana (`.nihon` files).
 
-<p align="center">
-  A Rust-inspired systems programming language written with Japanese scripts.
-</p>
-
-<p align="center">
-  <img src="assets/Hon.png" alt="Hon, the Nihon language mascot" width="180">
-  <br>
-  <em>Meet Hon, the mascot of Nihon.</em>
-</p>
-
-<p align="center">
-  <a href="#status"><img src="https://img.shields.io/badge/status-early%20development-orange" alt="Early development"></a>
-  <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-blue" alt="MIT or Apache-2.0 license"></a>
-  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/implementation-Rust-000000?logo=rust" alt="Implemented in Rust"></a>
-</p>
-
-## Overview
-
-**Nihon** explores what a statically typed, systems-oriented programming language might look like when its source code is written in Japanese. Its design takes inspiration from Rust, while using kanji, hiragana, and katakana for language keywords and types.
-
-The project is at an early stage: the current compiler is a stage-zero implementation focused on lexical analysis and diagnostics. The language grammar and syntax are still evolving, and the compiler is not yet ready for general-purpose development.
-
-## Current status
-
-- **Compiler:** stage 0; lexer and diagnostics are implemented.
-- **Parser and type checker:** not yet implemented.
-- **Syntax:** experimental and subject to change.
-- **Long-term goal:** build an initial compiler, then work toward a self-hosted compiler written in Nihon.
-
-See the [roadmap](#roadmap) for planned milestones.
-
-## Language design
-
-Nihon aims to combine familiar systems-language concepts with Japanese-script source code. The planned design draws inspiration from Rust concepts such as structs, enums, traits, pattern matching, and static types. These are design goals, not all features of the current compiler.
-
-Keywords can be written in Japanese or in ASCII romaji. Romaji spellings are designed to be practical to type on a standard keyboard.
-
-## Example
-
-The syntax below illustrates the language's direction. It is **provisional** and is not yet supported by the current compiler.
-
-```nihon
-構造体 点 {
-    x: 整32,
-    y: 整32,
-}
-
-実装 点 {
-    公開 関数 原点() -> 点 {
-        点 { x: 0, y: 0 }
-    }
+```
+関数 階乗(n: 整32) -> 整32 {
+    もし n <= 1 { 返却 1; }
+    n * 階乗(n - 1)
 }
 
 関数 主() {
-    束縛 p = 点::原点();
-    もし p.x == 0 {
-        表示!("原点です");
-    }
+    表示!("こんにちは世界");
 }
 ```
 
-### Romaji spelling
+## Features
 
-The same illustrative example using ASCII spellings. Long vowels are written by doubling the vowel, as in `kansuu` and `koukai`.
+- **Syntax highlighting** for kanji, kana and romaji keywords, macros (`表示!`), numbers, strings, characters and nested block comments.
+- **Full-width character detection:** zenkaku punctuation, digits and letters (`；`, `１`, `（`…) are underlined in red, mirroring compiler error E0002. Half-width katakana is flagged like warning W0005.
+- **Romaji completion:** type `kansuu` and pick `関数` from the list. Macros work the same way (`hyouji` → `表示!`).
+- **Hover** shows the romaji spelling and English meaning of every keyword and macro.
+- **Snippets** with Japanese and romaji prefixes (`main`, `kansuu`, `moshi`, `kaku`, `shougou`…).
+- **Compiler diagnostics:** errors and warnings from `nihonc` appear in the editor when a file is opened or saved, with error codes, notes and help text.
+- **Show tokens:** the *Nihon: Show tokens* command runs `nihonc --tokens` and opens the output beside the editor.
 
-```nihon
-kouzoutai ten {
-    x: sei32,
-    y: sei32,
-}
+## Commands
 
-jissou ten {
-    koukai kansuu genten() -> ten {
-        ten { x: 0, y: 0 }
-    }
-}
+| Command | Description |
+| --- | --- |
+| `Nihon: Check file` | Runs `nihonc` on the current file and updates the diagnostics. |
+| `Nihon: Show tokens` | Saves the file and shows the lexer's token stream. |
 
-kansuu shu() {
-    sokubaku p = ten::genten();
-    moshi p.x == 0 {
-        hyouji!("genten desu");
-    }
-}
-```
+## Settings
 
-## Keyword reference
+| Setting | Default | Description |
+| --- | --- | --- |
+| `nihon.compilerPath` | `nihonc` | Path to the compiler executable. |
+| `nihon.diagnostics.enabled` | `true` | Run `nihonc` on open and save. |
+| `nihon.romaji` | `false` | Pass `--romaji` (no warning for latin-letter keywords). |
+| `nihon.strict` | `false` | Pass `--strict` (warnings become errors). |
 
-| Rust-inspired concept | Japanese | Romaji | Meaning |
-|---|---|---|---|
-| `fn` | 関数 | `kansuu` | Function |
-| `let` | 束縛 | `sokubaku` | Binding |
-| `mut` | 可変 | `kahen` | Mutable |
-| `if` / `else` | もし / 他 | `moshi` / `hoka` | Conditional |
-| `for … in` | 各 x 中 | `kaku x naka` | Iteration |
-| `match` | 照合 | `shougou` | Pattern matching |
-| `struct` | 構造体 | `kouzoutai` | Structure |
-| `impl` | 実装 | `jissou` | Implementation |
-| `return` | 返却 | `henkyaku` | Return |
-| `println!` | 表示! | `hyouji!` | Display output |
+## Requirements
 
-## Getting started
-
-### Requirements
-
-- [Rust and Cargo](https://www.rust-lang.org/tools/install)
-
-### Build and test
-
-From the repository root, build and run the test suite:
-
-```bash
-cargo build --release
-cargo test
-```
-
-The stage-zero compiler currently provides lexer-oriented commands:
-
-```bash
-# Tokenize a source file
- target/release/nihonc --tokens path/to/file.nihon
-
-# Read romaji keywords without warnings
- target/release/nihonc --romaji path/to/file.nihon
-
-# Treat warnings as errors
- target/release/nihonc --strict path/to/file.nihon
-```
-
-To run the compiler on a file with its default options:
-
-```bash
-target/release/nihonc path/to/file.nihon
-```
-
-For compiler-specific details and test instructions, see [`nihonc/README.md`](nihonc/README.md).
-
-## Roadmap
-
-- [x] Initial keyword table
-- [x] Lexer
-- [ ] Initial grammar specification
-- [ ] Parser
-- [ ] Type checking
-- [ ] Decide on a backend
-- [ ] Minimal standard library
-- [ ] Rewrite the compiler in Nihon (stage 1)
-- [ ] Bootstrap a compiler that can compile itself
-
-## Contributing
-
-Nihon is an experimental project, and feedback is welcome. Open an issue to discuss bugs, ideas, or Japanese and romaji keyword choices. Please keep in mind that language syntax and project plans may change as development progresses.
-
-## License
-
-Nihon is dual-licensed under the [MIT License](LICENSE-MIT) or the [Apache License, Version 2.0](LICENSE-APACHE), at your option.
+Diagnostics and *Show tokens* need the `nihonc` compiler. Build it from the Nihon repository and either put it on your `PATH` or set `nihon.compilerPath`. Everything else works without it.

@@ -1,0 +1,101 @@
+{
+  "name": "nihon-lang",
+  "displayName": "Nihon",
+  "description": "Language support for Nihon, the Rust-style language written in kanji and kana: syntax highlighting, snippets, romaji completion, keyword hover and nihonc diagnostics.",
+  "version": "0.1.0",
+  "publisher": "prpep",
+  "license": "MIT OR Apache-2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Linters"
+  ],
+  "keywords": [
+    "nihon",
+    "japanese",
+    "kanji",
+    "kana",
+    "romaji",
+    "compiler",
+    "language"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:nihon"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "nihon",
+        "aliases": [
+          "Nihon",
+          "nihon"
+        ],
+        "extensions": [
+          ".nihon"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./images/language-icon.png",
+          "dark": "./images/language-icon.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nihon",
+        "scopeName": "source.nihon",
+        "path": "./syntaxes/nihon.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "nihon",
+        "path": "./snippets/nihon.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "nihon.check",
+        "title": "Nihon: Check file"
+      },
+      {
+        "command": "nihon.showTokens",
+        "title": "Nihon: Show tokens"
+      }
+    ],
+    "configuration": {
+      "title": "Nihon",
+      "properties": {
+        "nihon.compilerPath": {
+          "type": "string",
+          "default": "nihonc",
+          "description": "Path to the Nihon compiler executable (nihonc)."
+        },
+        "nihon.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run nihonc when a .nihon file is opened or saved and show its errors and warnings in the editor."
+        },
+        "nihon.romaji": {
+          "type": "boolean",
+          "default": false,
+          "description": "Pass --romaji to the compiler (latin-letter keywords are accepted without warning W0001)."
+        },
+        "nihon.strict": {
+          "type": "boolean",
+          "default": false,
+          "description": "Pass --strict to the compiler (every warning becomes an error)."
+        }
+      }
+    }
+  },
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#C82028",
+    "theme": "dark"
+  }
+}

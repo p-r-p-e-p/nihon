@@ -1,0 +1,219 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Nihon",
+  "scopeName": "source.nihon",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#chars"
+    },
+    {
+      "include": "#zenkaku"
+    },
+    {
+      "include": "#halfkana"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#macros"
+    },
+    {
+      "include": "#definitions"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#calls"
+    },
+    {
+      "include": "#operators"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.nihon",
+          "match": "//.*$"
+        },
+        {
+          "include": "#block_comment"
+        }
+      ]
+    },
+    "block_comment": {
+      "name": "comment.block.nihon",
+      "begin": "/\\*",
+      "end": "\\*/",
+      "patterns": [
+        {
+          "include": "#block_comment"
+        }
+      ]
+    },
+    "escapes": {
+      "patterns": [
+        {
+          "name": "constant.character.escape.nihon",
+          "match": "\\\\(?:[nrt0\\\\\"']|u\\{[0-9A-Fa-f]{1,6}\\})"
+        },
+        {
+          "name": "invalid.illegal.escape.nihon",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.nihon",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "include": "#escapes"
+        }
+      ]
+    },
+    "chars": {
+      "name": "string.quoted.single.nihon",
+      "begin": "'",
+      "end": "'|$",
+      "patterns": [
+        {
+          "include": "#escapes"
+        }
+      ]
+    },
+    "zenkaku": {
+      "name": "invalid.illegal.zenkaku.nihon",
+      "match": "[\\x{3000}\\x{3001}\\x{3002}\\x{3008}-\\x{3011}\\x{3014}-\\x{301B}\\x{30FB}\\x{FF01}-\\x{FF5E}]"
+    },
+    "halfkana": {
+      "name": "invalid.deprecated.halfkana.nihon",
+      "match": "[\\x{FF66}-\\x{FF9F}]+"
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.nihon",
+          "match": "(?<![\\p{L}_])0[xX][0-9A-Fa-f_]+"
+        },
+        {
+          "name": "constant.numeric.binary.nihon",
+          "match": "(?<![\\p{L}_])0[bB][01_]+"
+        },
+        {
+          "name": "constant.numeric.octal.nihon",
+          "match": "(?<![\\p{L}_])0[oO][0-7_]+"
+        },
+        {
+          "name": "constant.numeric.float.nihon",
+          "match": "(?<![\\p{L}_])[0-9][0-9_]*(?:\\.[0-9][0-9_]*(?:[eE][+-]?[0-9_]+)?|[eE][+-]?[0-9_]+)"
+        },
+        {
+          "name": "constant.numeric.integer.nihon",
+          "match": "(?<![\\p{L}_])[0-9][0-9_]*"
+        }
+      ]
+    },
+    "macros": {
+      "match": "(?<![\\p{L}\\p{N}_])([\\p{L}_][\\p{L}\\p{N}_]*)(!)(?=[(\\[{])",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.macro.nihon"
+        },
+        "2": {
+          "name": "punctuation.definition.macro.nihon"
+        }
+      }
+    },
+    "definitions": {
+      "patterns": [
+        {
+          "match": "(?<![\\p{L}\\p{N}_])(kansuu|関数)(?![\\p{L}\\p{N}_])\\s+([\\p{L}_][\\p{L}\\p{N}_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.function.nihon"
+            },
+            "2": {
+              "name": "entity.name.function.nihon"
+            }
+          }
+        },
+        {
+          "match": "(?<![\\p{L}\\p{N}_])(rekkyogata|kouzoutai|tokusei|jissou|構造体|列挙型|特性|実装)(?![\\p{L}\\p{N}_])\\s+([\\p{L}_][\\p{L}\\p{N}_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.nihon"
+            },
+            "2": {
+              "name": "entity.name.type.nihon"
+            }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.nihon",
+          "match": "(?<![\\p{L}\\p{N}_])(hokamoshi|henkyaku|chuudan|shougou|zokkou|moshi|mugen|hoka|aida|kaku|naka|他もし|もし|無限|中断|続行|返却|照合|他|間|各|中)(?![\\p{L}\\p{N}_])"
+        },
+        {
+          "name": "storage.type.nihon",
+          "match": "(?<![\\p{L}\\p{N}_])(rekkyogata|kouzoutai|sokubaku|tokusei|kansuu|teisuu|jissou|構造体|列挙型|関数|束縛|定数|実装|特性)(?![\\p{L}\\p{N}_])"
+        },
+        {
+          "name": "storage.modifier.nihon",
+          "match": "(?<![\\p{L}\\p{N}_])(koukai|kahen|kiken|gaibu|可変|公開|危険|外部)(?![\\p{L}\\p{N}_])"
+        },
+        {
+          "name": "keyword.other.nihon",
+          "match": "(?<![\\p{L}\\p{N}_])(toshite|shiyou|として|使用)(?![\\p{L}\\p{N}_])"
+        },
+        {
+          "name": "constant.language.boolean.nihon",
+          "match": "(?<![\\p{L}\\p{N}_])(shin|gi|真|偽)(?![\\p{L}\\p{N}_])"
+        },
+        {
+          "name": "variable.language.self.nihon",
+          "match": "(?<![\\p{L}\\p{N}_])(jishin|jibun|自分|自身)(?![\\p{L}\\p{N}_])"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "support.type.primitive.nihon",
+          "match": "(?<![\\p{L}\\p{N}_])(非負32|整32|実64|文字列|真偽|文字|任意|結果)(?![\\p{L}\\p{N}_])"
+        },
+        {
+          "name": "support.constant.variant.nihon",
+          "match": "(?<![\\p{L}\\p{N}_])(成功|失敗|有|無)(?![\\p{L}\\p{N}_])"
+        }
+      ]
+    },
+    "calls": {
+      "match": "(?<![\\p{L}\\p{N}_])([\\p{L}_][\\p{L}\\p{N}_]*)(?=\\s*\\()",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.call.nihon"
+        }
+      }
+    },
+    "operators": {
+      "name": "keyword.operator.nihon",
+      "match": "->|=>|==|!=|<=|>=|&&|\\|\\||::|\\.\\.=?|[+\\-*/%]=|[+\\-*/%=<>!&|]"
+    }
+  }
+}

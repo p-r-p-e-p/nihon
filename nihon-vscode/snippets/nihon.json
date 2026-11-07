@@ -1,0 +1,188 @@
+{
+  "主 (main function)": {
+    "prefix": [
+      "main",
+      "shu",
+      "主"
+    ],
+    "body": [
+      "関数 主() {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Program entry point"
+  },
+  "関数 (kansuu)": {
+    "prefix": [
+      "kansuu",
+      "関数"
+    ],
+    "body": [
+      "関数 ${1:名前}(${2}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Function declaration"
+  },
+  "関数 with return type": {
+    "prefix": [
+      "kansuu-ret",
+      "関数-返却"
+    ],
+    "body": [
+      "関数 ${1:名前}(${2}) -> ${3:整32} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Function with a return type"
+  },
+  "束縛 (sokubaku)": {
+    "prefix": [
+      "sokubaku",
+      "束縛"
+    ],
+    "body": "束縛 ${1:名前} = ${2:値};",
+    "description": "let"
+  },
+  "束縛 可変": {
+    "prefix": [
+      "sokubaku-kahen",
+      "束縛-可変"
+    ],
+    "body": "束縛 可変 ${1:名前} = ${2:値};",
+    "description": "let mut"
+  },
+  "もし (moshi)": {
+    "prefix": [
+      "moshi",
+      "もし"
+    ],
+    "body": [
+      "もし ${1:条件} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "if"
+  },
+  "もし ... 他": {
+    "prefix": [
+      "moshi-hoka",
+      "もし-他"
+    ],
+    "body": [
+      "もし ${1:条件} {",
+      "\t$2",
+      "} 他 {",
+      "\t$0",
+      "}"
+    ],
+    "description": "if / else"
+  },
+  "間 (aida)": {
+    "prefix": [
+      "aida",
+      "間"
+    ],
+    "body": [
+      "間 ${1:条件} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "while"
+  },
+  "無限 (mugen)": {
+    "prefix": [
+      "mugen",
+      "無限"
+    ],
+    "body": [
+      "無限 {",
+      "\t$0",
+      "}"
+    ],
+    "description": "loop"
+  },
+  "各 ... 中 (kaku)": {
+    "prefix": [
+      "kaku",
+      "各"
+    ],
+    "body": [
+      "各 ${1:要素} 中 ${2:範囲} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "for each"
+  },
+  "照合 (shougou)": {
+    "prefix": [
+      "shougou",
+      "照合"
+    ],
+    "body": [
+      "照合 ${1:値} {",
+      "\t${2:パターン} => ${3:式},",
+      "\t$0",
+      "}"
+    ],
+    "description": "match"
+  },
+  "構造体 (kouzoutai)": {
+    "prefix": [
+      "kouzoutai",
+      "構造体"
+    ],
+    "body": [
+      "構造体 ${1:名前} {",
+      "\t${2:欄}: ${3:整32},",
+      "\t$0",
+      "}"
+    ],
+    "description": "struct"
+  },
+  "列挙型 (rekkyogata)": {
+    "prefix": [
+      "rekkyogata",
+      "列挙型"
+    ],
+    "body": [
+      "列挙型 ${1:名前} {",
+      "\t${2:候補},",
+      "\t$0",
+      "}"
+    ],
+    "description": "enum"
+  },
+  "実装 (jissou)": {
+    "prefix": [
+      "jissou",
+      "実装"
+    ],
+    "body": [
+      "実装 ${1:名前} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "impl"
+  },
+  "特性 (tokusei)": {
+    "prefix": [
+      "tokusei",
+      "特性"
+    ],
+    "body": [
+      "特性 ${1:名前} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "trait"
+  },
+  "表示! (hyouji)": {
+    "prefix": [
+      "hyouji",
+      "表示"
+    ],
+    "body": "表示!(\"${1:テキスト}\");",
+    "description": "println!"
+  }
+}
