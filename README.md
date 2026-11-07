@@ -85,7 +85,7 @@ Every keyword accepts both spellings.
 
 - [x] Keyword table
 - [ ] Grammar specification (initial subset)
-- [ ] Lexer
+- [x] Lexer
 - [ ] Parser
 - [ ] Type checking
 - [ ] Backend (to be decided)
