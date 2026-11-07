@@ -4,14 +4,14 @@
 
 # Nihon
 
-A systems programming language with Rust-inspired syntax, written entirely in kanji, hiragana and katakana.
+A systems programming language with Rust-inspired syntax, written entirely in kanji, hiragana, and katakana.
 
-> **Status:** early development. There is no usable compiler yet, and the syntax may change.
+> **Status:** Early development. There is no usable compiler yet, and the syntax may change.
 
 ## About
 
-- Rust concepts: structs, enums, traits, `match`, static types.
-- Source code 100% in Japanese: keywords in kanji, types in kanji or katakana.
+- Rust concepts: structs, enums, traits, `match`, and static types.
+- Source code is written 100% in Japanese: keywords use kanji, and types use kanji or katakana.
 - Self-hosting goal: after an initial compiler (stage 0) written in another language, the Nihon compiler will be rewritten in Nihon and compile itself.
 
 ## Example
@@ -97,4 +97,4 @@ Issues and suggestions are welcome, especially about keyword naming.
 
 ## License
 
-To be decided.
+Nihon is dual-licensed under the [MIT License](LICENSE-MIT) or the [Apache License, Version 2.0](LICENSE-APACHE), at your option. You may choose either license when using, modifying, or distributing this project. See the corresponding license file for the applicable terms.
