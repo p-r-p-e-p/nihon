@@ -2,7 +2,7 @@
   <img src="shisan/SubBanner.png" alt="nihon" width="720">
 </p>
 
-# Nihon <img src="shisan/Icon.png" width="120">
+# Nihon <img src="shisan/Icon.png" width="20">
 
 A systems programming language with Rust-inspired syntax, written entirely in kanji, hiragana and katakana.
 
