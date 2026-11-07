@@ -1,0 +1,62 @@
+{
+  "name": "nihon-lang",
+  "displayName": "Nihon",
+  "description": "Suporte à linguagem Nihon: realce de sintaxe, snippets, hover, autocompletar romaji e diagnósticos do nihonc.",
+  "version": "0.1.0",
+  "publisher": "prpep",
+  "license": "MIT",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Programming Languages", "Snippets", "Linters"],
+  "keywords": ["nihon", "japanese", "kanji", "compiler"],
+  "main": "./extension.js",
+  "activationEvents": ["onLanguage:nihon"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "nihon",
+        "aliases": ["Nihon", "nihon"],
+        "extensions": [".nihon"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nihon",
+        "scopeName": "source.nihon",
+        "path": "./syntaxes/nihon.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      { "language": "nihon", "path": "./snippets/nihon.json" }
+    ],
+    "commands": [
+      { "command": "nihon.check", "title": "Nihon: Verificar arquivo" },
+      { "command": "nihon.showTokens", "title": "Nihon: Mostrar tokens" }
+    ],
+    "configuration": {
+      "title": "Nihon",
+      "properties": {
+        "nihon.compilerPath": {
+          "type": "string",
+          "default": "nihonc",
+          "description": "Caminho do executável do compilador (nihonc)."
+        },
+        "nihon.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Rodar o nihonc ao abrir e salvar um arquivo .nihon e mostrar erros/avisos no editor."
+        },
+        "nihon.romaji": {
+          "type": "boolean",
+          "default": false,
+          "description": "Passa --romaji ao compilador (palavras-chave em letras latinas sem aviso W0001)."
+        },
+        "nihon.strict": {
+          "type": "boolean",
+          "default": false,
+          "description": "Passa --strict ao compilador (todo aviso vira erro)."
+        }
+      }
+    }
+  }
+}
