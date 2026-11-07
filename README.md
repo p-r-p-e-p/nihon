@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../assets/SubBanner.png" alt="Nihon — a Japanese-script systems programming language" width="720">
+  <img src="assets/SubBanner.png" alt="Nihon — a Japanese-script systems programming language" width="720">
 </p>
 
 <h1 align="center">Nihon for VS Code</h1>
@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="../assets/Hon.png" alt="Hon, the Nihon language mascot" width="150">
+  <img src="assets/Hon.png" alt="Hon, the Nihon language mascot" width="150">
   <br>
   <em>Write Nihon in your editor, with a little help from Hon.</em>
 </p>
