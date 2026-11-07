@@ -1,0 +1,25 @@
+error[W0001]: keyword `kansuu` is written in latin letters (denied by `--strict`)
+ --> romaji_strict.nihon:1:1
+  |
+1 | kansuu shu() {
+  | ^^^^^^ latin spelling of `関数` ("function")
+  |
+  = note: pass `--romaji` to allow latin keywords
+help: use the canonical form
+  |
+1 | 関数 shu() {
+  | ~~~~
+
+error[W0001]: macro `hyouji!` is written in latin letters (denied by `--strict`)
+ --> romaji_strict.nihon:2:5
+  |
+2 |     hyouji!("こんにちは世界");
+  |     ^^^^^^ latin spelling of `表示!` ("println")
+  |
+  = note: pass `--romaji` to allow latin keywords
+help: use the canonical form
+  |
+2 |     表示!("こんにちは世界");
+  |     ~~~~
+
+error: aborting due to 2 previous errors

@@ -1,0 +1,10 @@
+error[E0001]: unterminated string literal
+ --> e0001_string.nihon:2:9
+  |
+2 |     表示!("こんにちは世界);
+  |           ^^^^^^^^^^^^^^^^^ this string is never closed
+  |
+  = note: strings may span several lines, so a missing closing `"` swallows the rest of the file
+  = help: add a closing `"`
+
+error: aborting due to 1 previous error

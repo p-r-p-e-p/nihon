@@ -1,0 +1,23 @@
+warning[W0005]: half-width katakana in identifier `ﾊﾝｶｸ`
+ --> w0005_halfwidth.nihon:2:8
+  |
+2 |     束縛 ﾊﾝｶｸ = 1;
+  |          ^^^^ half-width katakana (hankaku)
+  |
+help: use full-width katakana
+  |
+2 |     束縛 ハンカク = 1;
+  |          ~~~~~~~~
+
+warning[W0005]: half-width katakana in identifier `ｶﾞｷﾞ`
+ --> w0005_halfwidth.nihon:3:8
+  |
+3 |     束縛 ｶﾞｷﾞ = 2;
+  |          ^^^^ half-width katakana (hankaku)
+  |
+help: use full-width katakana
+  |
+3 |     束縛 ガギ = 2;
+  |          ~~~~
+
+warning: 2 warnings emitted

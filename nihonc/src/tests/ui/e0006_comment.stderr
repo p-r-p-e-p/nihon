@@ -1,0 +1,10 @@
+error[E0006]: unterminated block comment
+ --> e0006_comment.nihon:2:5
+  |
+2 |     /* comentario /* aninhado */ que nunca fecha
+  |     ^^ this block comment is never closed
+  |
+  = note: block comments nest: every `/*` needs its own `*/`
+  = help: close it with `*/`
+
+error: aborting due to 1 previous error

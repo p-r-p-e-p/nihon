@@ -1,0 +1,7 @@
+error[E0007]: unknown start of token: `@`
+ --> tab.nihon:2:11
+  |
+2 |     束縛 x = 5 @ 3;
+  |                ^ unknown character
+
+error: aborting due to 1 previous error
