@@ -4,6 +4,8 @@
 
 # Nihon
 
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+
 A systems programming language with Rust-inspired syntax, written entirely in kanji, hiragana, and katakana.
 
 > **Status:** Early development. There is no usable compiler yet, and the syntax may change.
