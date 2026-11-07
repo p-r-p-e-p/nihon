@@ -1,0 +1,25 @@
+warning[W0001]: keyword `kansuu` is written in latin letters
+ --> romaji.nihon:1:1
+  |
+1 | kansuu shu() {
+  | ^^^^^^ latin spelling of `関数` ("function")
+  |
+  = note: pass `--romaji` to allow latin keywords
+help: use the canonical form
+  |
+1 | 関数 shu() {
+  | ~~~~
+
+warning[W0001]: macro `hyouji!` is written in latin letters
+ --> romaji.nihon:2:5
+  |
+2 |     hyouji!("こんにちは世界");
+  |     ^^^^^^ latin spelling of `表示!` ("println")
+  |
+  = note: pass `--romaji` to allow latin keywords
+help: use the canonical form
+  |
+2 |     表示!("こんにちは世界");
+  |     ~~~~
+
+warning: 2 warnings emitted

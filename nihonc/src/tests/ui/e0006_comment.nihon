@@ -1,0 +1,4 @@
+関数 主() {
+    /* comentario /* aninhado */ que nunca fecha
+    表示!("oi");
+}
