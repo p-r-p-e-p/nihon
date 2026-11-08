@@ -1,0 +1,10 @@
+
+*.nihon linguist-language=Rust
+
+
+*.nihon text eol=lf
+*.stderr text eol=lf
+*.flags text eol=lf
+*.rs text eol=lf
+*.md text eol=lf
+*.toml text eol=lf

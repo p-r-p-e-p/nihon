@@ -1,1 +1,8 @@
 **/target/
+
+# executables built next to the sources
+*.exe
+**/tests/ui/*
+!**/tests/ui/*.nihon
+!**/tests/ui/*.stderr
+!**/tests/ui/*.flags
