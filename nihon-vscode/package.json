@@ -2,7 +2,7 @@
   "name": "nihon-lang",
   "displayName": "Nihon",
   "description": "Language support for Nihon, the Rust-style language written in kanji and kana: syntax highlighting, snippets, romaji completion, keyword hover, live nihonc diagnostics and quick fixes.",
-  "version": "0.3.0",
+  "version": "0.3.5",
   "publisher": "prpep",
   "license": "MIT or Apache-2.0",
   "engines": {
