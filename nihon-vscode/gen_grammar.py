@@ -21,7 +21,9 @@ selfs = [("自分","jibun"),("自身","jishin")]
 macros = [("表示","hyouji"),("出力","shutsuryoku"),("異常終了","ijoushuuryou"),
           ("表明","hyoumei"),("整形","seikei"),("未実装","mijissou")]
 # (jp, romaji) — tabela TYPES do codegen_c.rs
-types = [("整32","sei32"),("非負32","hifu32"),("実64","jitsu64"),("真偽","shingi"),("文字","moji")]
+# metodos: tabela METHODS de gen_method (so existem em 文字列 por enquanto)
+methods = [("長さ","nagasa"),("バイト数","baitosuu")]
+types = [("整32","sei32"),("非負32","hifu32"),("実64","jitsu64"),("真偽","shingi"),("文字","moji"),("文字列","mojiretsu")]
 
 flat = lambda pairs: [w for p in pairs for w in p]
 
@@ -30,7 +32,7 @@ grammar = {
  "name": "Nihon",
  "scopeName": "source.nihon",
  "patterns": [{"include": "#comments"},{"include": "#strings"},{"include": "#chars"},
-              {"include": "#zenkaku"},{"include": "#halfkana"},{"include": "#numbers"},
+              {"include": "#zenkaku"},{"include": "#halfkana"},{"include": "#numbers"},{"include": "#methods"},
               {"include": "#macros"},{"include": "#definitions"},{"include": "#keywords"},
               {"include": "#types"},{"include": "#calls"},{"include": "#operators"}],
  "repository": {
@@ -72,6 +74,11 @@ grammar = {
     kw(flat(selfs), "variable.language.self.nihon")]},
   "types": {"patterns": [
     kw(flat(types), "support.type.primitive.nihon")]},
+  "methods": {"patterns": [
+    {"match": f"(?<!\\.)(\\.)({alt(flat(methods))}){E}",
+     "captures": {"1": {"name": "punctuation.accessor.nihon"}, "2": {"name": "support.function.method.nihon"}}},
+    {"match": f"(?<!\\.)(\\.)({ID})(?=\\s*\\()",
+     "captures": {"1": {"name": "punctuation.accessor.nihon"}, "2": {"name": "entity.name.function.method.nihon"}}}]},
   "calls": {"match": f"{B}({ID})(?=\\s*\\()", "captures": {"1": {"name": "entity.name.function.call.nihon"}}},
   "operators": {"name": "keyword.operator.nihon",
                 "match": "->|=>|==|!=|<=|>=|&&|\\|\\||::|\\.\\.=?|[+\\-*/%]=|[+\\-*/%=<>!&|]"}

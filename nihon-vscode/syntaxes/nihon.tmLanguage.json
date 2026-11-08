@@ -22,6 +22,9 @@
       "include": "#numbers"
     },
     {
+      "include": "#methods"
+    },
+    {
       "include": "#macros"
     },
     {
@@ -195,7 +198,33 @@
       "patterns": [
         {
           "name": "support.type.primitive.nihon",
-          "match": "(?<![\\p{L}\\p{N}_])(jitsu64|hifu32|shingi|sei32|非負32|moji|整32|実64|真偽|文字)(?![\\p{L}\\p{N}_])"
+          "match": "(?<![\\p{L}\\p{N}_])(mojiretsu|jitsu64|hifu32|shingi|sei32|非負32|moji|整32|実64|文字列|真偽|文字)(?![\\p{L}\\p{N}_])"
+        }
+      ]
+    },
+    "methods": {
+      "patterns": [
+        {
+          "match": "(?<!\\.)(\\.)(baitosuu|nagasa|バイト数|長さ)(?![\\p{L}\\p{N}_])",
+          "captures": {
+            "1": {
+              "name": "punctuation.accessor.nihon"
+            },
+            "2": {
+              "name": "support.function.method.nihon"
+            }
+          }
+        },
+        {
+          "match": "(?<!\\.)(\\.)([\\p{L}_][\\p{L}\\p{N}_]*)(?=\\s*\\()",
+          "captures": {
+            "1": {
+              "name": "punctuation.accessor.nihon"
+            },
+            "2": {
+              "name": "entity.name.function.method.nihon"
+            }
+          }
         }
       ]
     },

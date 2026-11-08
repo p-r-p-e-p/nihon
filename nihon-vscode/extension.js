@@ -26,11 +26,15 @@ const MACROS = [
 const TYPES = [
   ['整32', 'sei32', '32-bit signed integer'], ['非負32', 'hifu32', '32-bit unsigned integer'],
   ['実64', 'jitsu64', '64-bit floating point'], ['真偽', 'shingi', 'boolean'],
-  ['文字', 'moji', 'character'],
+  ['文字', 'moji', 'character'], ['文字列', 'mojiretsu', 'text (UTF-8, immutable)'],
+];
+// métodos: tabela METHODS de gen_method (codegen_c.rs); só `文字列` tem métodos por enquanto
+const METHODS = [
+  ['長さ', 'nagasa', 'length in characters'], ['バイト数', 'baitosuu', 'length in bytes'],
 ];
 
 const LOOKUP = new Map();
-for (const [list, kind] of [[KEYWORDS, 'keyword'], [MACROS, 'macro'], [TYPES, 'type']]) {
+for (const [list, kind] of [[KEYWORDS, 'keyword'], [MACROS, 'macro'], [TYPES, 'type'], [METHODS, 'method']]) {
   for (const [jp, ro, en] of list) {
     LOOKUP.set(jp, { jp, ro, en, kind });
     LOOKUP.set(ro, { jp, ro, en, kind });
@@ -38,7 +42,10 @@ for (const [list, kind] of [[KEYWORDS, 'keyword'], [MACROS, 'macro'], [TYPES, 't
 }
 
 // mesma regra de identificador do lexer (chars.rs): kana, han, latim, `_`, meia largura
-const WORD = /[_A-Za-z0-9\u00C0-\u024F\u3005-\u3007\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uFF66-\uFF9F]+/;
+const WORD_CLASS = '_A-Za-z0-9\\u00C0-\\u024F\\u3005-\\u3007\\u3040-\\u30FF\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uFF66-\\uFF9F';
+const WORD = new RegExp(`[${WORD_CLASS}]+`);
+// o cursor está logo depois de `algo.` (e não de `..`)?
+const AFTER_DOT = new RegExp(`(^|[^.])\\.[${WORD_CLASS}]*$`);
 
 const FIXALL_KIND = vscode.CodeActionKind.SourceFixAll.append('nihon');
 
@@ -318,10 +325,11 @@ function activate(context) {
 
     // digitar "kansuu" no teclado latino e escolher 関数 na lista
     vscode.languages.registerCompletionItemProvider('nihon', {
-      provideCompletionItems() {
+      provideCompletionItems(doc, pos) {
         const mk = ([jp, ro, en], kind) => {
-          const text = kind === 'macro' ? `${jp}!` : jp;
+          const text = kind === 'macro' ? `${jp}!` : kind === 'method' ? `${jp}()` : jp;
           const k = kind === 'macro' ? vscode.CompletionItemKind.Function
+            : kind === 'method' ? vscode.CompletionItemKind.Method
             : kind === 'type' ? vscode.CompletionItemKind.Class : vscode.CompletionItemKind.Keyword;
           const item = new vscode.CompletionItem(text, k);
           item.insertText = text;
@@ -330,13 +338,17 @@ function activate(context) {
           item.detail = `${ro} — ${en}`;
           return item;
         };
+        // depois de um ponto só fazem sentido os métodos
+        if (AFTER_DOT.test(doc.lineAt(pos.line).text.slice(0, pos.character))) {
+          return METHODS.map((x) => mk(x, 'method'));
+        }
         return [
           ...KEYWORDS.map((x) => mk(x, 'keyword')),
           ...MACROS.map((x) => mk(x, 'macro')),
           ...TYPES.map((x) => mk(x, 'type')),
         ];
       },
-    })
+    }, '.')
   );
 
   vscode.workspace.textDocuments.forEach(check);

@@ -48,7 +48,7 @@ const vscode = {
   WorkspaceEdit: class { constructor() { this.edits = []; } replace(uri, range, text) { this.edits.push({ range, text }); } },
   MarkdownString: class { appendMarkdown() {} },
   Hover: class {}, CompletionItem: class { constructor(l, k) { this.label = l; this.kind = k; } },
-  CompletionItemKind: { Keyword: 0, Function: 1, Class: 2 }, ViewColumn: { Beside: 2 },
+  CompletionItemKind: { Keyword: 0, Function: 1, Class: 2, Method: 3 }, ViewColumn: { Beside: 2 },
   languages: {
     createDiagnosticCollection: () => {
       const m = new Map();
@@ -56,7 +56,8 @@ const vscode = {
       return { set: (u, v) => m.set(u.toString(), v), get: (u) => m.get(u.toString()), delete: (u) => m.delete(u.toString()), dispose() {} };
     },
     registerCodeActionsProvider: (s, p) => { registered.codeActions = p; return noop(); },
-    registerHoverProvider: noop, registerCompletionItemProvider: noop,
+    registerHoverProvider: noop,
+    registerCompletionItemProvider: (s, p) => { registered.completion = p; return noop(); },
   },
   workspace: {
     getConfiguration: () => ({ get: (k) => settings[k] }),
@@ -190,6 +191,34 @@ const diagsOf = (doc) => collections.get('nihon').get(doc.uri.toString()) || [];
   for (const n of ['prog', 'typo', 'syntax']) {
     assert.ok(!fs.existsSync(path.join(process.cwd(), n)), `executavel ${n} foi gerado`);
   }
+
+  // ---------- 7. tipo e método em romaji (`文字列`, `長さ`): fix all deixa o programa limpo
+  let text4 = '関数 主() {\n    束縛 s: mojiretsu = "あい";\n    表示!("{}", s.nagasa());\n}\n';
+  let doc4 = makeDoc('texto.nihon', text4);
+  await ext._internals.check(doc4);
+  assert.deepStrictEqual(diagsOf(doc4).map((d) => d.code).sort(), ['W0001', 'W0001']);
+  text4 = apply(text4, ext._internals.fixAllEdit(doc4).edit.edits);
+  assert.strictEqual(text4, '関数 主() {\n    束縛 s: 文字列 = "あい";\n    表示!("{}", s.長さ());\n}\n');
+  doc4 = makeDoc('texto.nihon', text4);
+  assert.strictEqual(nihonc(doc4.fileName).stderr, '');
+
+  // método com erro de digitação: só quick fix, nunca no fix all
+  const doc5 = makeDoc('typo2.nihon', '関数 主() {\n    束縛 s = "a";\n    表示!("{}", s.nagas());\n}\n');
+  await ext._internals.check(doc5);
+  const m5 = diagsOf(doc5).find((d) => d.code === 'E0613');
+  const a5 = provider.provideCodeActions(doc5, m5.range, { diagnostics: [m5] }).find((a) => a.kind === Kind.QuickFix);
+  assert.strictEqual(a5.title, 'A method with a similar name exists: `長さ`');
+  assert.strictEqual(ext._internals.fixAllEdit(doc5), null);
+
+  // ---------- 8. autocompletar: depois do ponto só métodos; fora dele, o resto
+  const complete = (line, ch) => registered.completion.provideCompletionItems(
+    { lineAt: () => ({ text: line }) }, new Position(0, ch));
+  const afterDot = complete('    s.na', 8).map((i) => i.label);
+  assert.deepStrictEqual(afterDot, ['長さ()', 'バイト数()']);
+  const plainList = complete('    kan', 7).map((i) => i.label);
+  assert.ok(plainList.includes('関数') && plainList.includes('文字列') && plainList.includes('表示!'));
+  assert.ok(!plainList.includes('長さ()'));
+  assert.ok(complete('    0..', 7).map((i) => i.label).includes('関数')); // `..` (intervalo) não abre a lista de métodos
 
   fs.rmSync(dir, { recursive: true, force: true });
   console.log('e2e.js: ok');
