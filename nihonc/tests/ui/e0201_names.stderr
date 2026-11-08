@@ -35,10 +35,10 @@ error[E0201]: cannot find type `整3` in this scope
 13 |     束縛 x: 整3 = 1;
    |             ^^^ not found in this scope
    |
-   = note: available types: `整32` (sei32), `非負32` (hifu32), `実64` (jitsu64), `真偽` (shingi), `文字` (moji), `文字列` (mojiretsu)
+   = note: available types: `整8` (sei8), `整16` (sei16), `整32` (sei32), `整64` (sei64), `非負8` (hifu8), `非負16` (hifu16), `非負32` (hifu32), `非負64` (hifu64), `大きさ` (ookisa), `実32` (jitsu32), `実64` (jitsu64), `真偽` (shingi), `文字` (moji), `文字列` (mojiretsu)
 help: a type with a similar name exists
    |
-13 |     束縛 x: 整32 = 1;
-   |             ~~~~
+13 |     束縛 x: 整8 = 1;
+   |             ~~~
 
 error: aborting due to 4 previous errors

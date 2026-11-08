@@ -63,7 +63,7 @@ error[E0305]: cannot cast `真偽` as `実64`
 12 |     束縛 q = 真 として 実64;
    |              ^^^^^^^^^^^^^^ invalid cast
    |
-   = note: `として` (toshite, "as") converts between numbers; `真偽` and `文字` can only become integers
+   = note: `として` (toshite, "as") converts between numbers; `真偽` and `文字` can only become integers, and only `非負8` can become a `文字`
 
 error[E0306]: integer literal is out of range
   --> e0301_types.nihon:13:19

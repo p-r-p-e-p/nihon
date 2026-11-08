@@ -1,0 +1,60 @@
+error[E0306]: integer literal is out of range
+ --> e0306_ranges.nihon:1:12
+  |
+1 | 定数 A: 整8 = 128;
+  |               ^^^ does not fit in `整8`
+  |
+  = note: the range of `整8` is -128 to 127
+
+error[E0306]: integer literal is out of range
+ --> e0306_ranges.nihon:2:13
+  |
+2 | 定数 B: 非負8 = 256;
+  |                 ^^^ does not fit in `非負8`
+  |
+  = note: the range of `非負8` is 0 to 255
+
+error[E0306]: integer literal is out of range
+ --> e0306_ranges.nihon:3:13
+  |
+3 | 定数 C: 整16 = -32769;
+  |                ^^^^^^ does not fit in `整16`
+  |
+  = note: the range of `整16` is -32768 to 32767
+
+error[E0301]: mismatched types
+  --> e0306_ranges.nihon:10:17
+   |
+10 |     束縛 y: 整16 = x;
+   |                    ^ expected `整16`, found `整8`
+   |
+   = note: `整16` (sei16) is a 16-bit signed integer
+   = note: `整8` (sei8) is an 8-bit signed integer
+help: convert it with `として` (toshite, "as")
+   |
+10 |     束縛 y: 整16 = x として 整16;
+   |                     ++++++++++++
+
+error[E0304]: cannot apply unary operator `-` to type `非負8`
+  --> e0306_ranges.nihon:11:17
+   |
+11 |     束縛 z: 非負8 = -1;
+   |                     ^^ cannot apply `-` to `非負8`
+   |
+   = note: unsigned numbers cannot be negative
+
+error[E0201]: cannot find value `大きさ` in this scope
+  --> e0306_ranges.nihon:12:16
+   |
+12 |     束縛 w = x + 大きさ;
+   |                  ^^^^^^ not found in this scope
+
+error[E0305]: cannot cast `整32` as `文字`
+  --> e0306_ranges.nihon:13:16
+   |
+13 |     束縛 v: 文字 = 97 として 整32 として 文字;
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^ invalid cast
+   |
+   = note: `として` (toshite, "as") converts between numbers; `真偽` and `文字` can only become integers, and only `非負8` can become a `文字`
+
+error: aborting due to 7 previous errors

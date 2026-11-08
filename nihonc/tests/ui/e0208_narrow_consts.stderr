@@ -1,0 +1,33 @@
+error[E0208]: evaluation of constant value failed
+ --> e0208_narrow_consts.nihon:1:12
+  |
+1 | 定数 D: 整8 = 100 * 2;
+  |               ^^^^^^^ attempt to multiply with overflow
+  |
+  = note: constants are calculated while compiling, so a bad calculation is an error here, not a panic when the program runs
+
+error[E0208]: evaluation of constant value failed
+ --> e0208_narrow_consts.nihon:2:14
+  |
+2 | 定数 E: 非負64 = 0 - 1;
+  |                  ^^^^^ attempt to subtract with overflow
+  |
+  = note: constants are calculated while compiling, so a bad calculation is an error here, not a panic when the program runs
+
+error[E0208]: evaluation of constant value failed
+ --> e0208_narrow_consts.nihon:3:12
+  |
+3 | 定数 F: 整8 = -128 / -1;
+  |               ^^^^^^^^^ attempt to divide with overflow
+  |
+  = note: constants are calculated while compiling, so a bad calculation is an error here, not a panic when the program runs
+
+error[E0208]: evaluation of constant value failed
+ --> e0208_narrow_consts.nihon:5:13
+  |
+5 | 定数 H: 非負8 = 200 + 100;
+  |                 ^^^^^^^^^ attempt to add with overflow
+  |
+  = note: constants are calculated while compiling, so a bad calculation is an error here, not a panic when the program runs
+
+error: aborting due to 4 previous errors

@@ -74,9 +74,10 @@ Exit codes: `0` success, `1` the program has errors, `2` wrong command line.
 | `もし` / `他もし` / `他` (moshi / hokamoshi / hoka, `if` / `else if` / `else`) | usable as expressions |
 | `間`, `無限`, `各 i 中 a..b` (aida, mugen, kaku i naka: `while`, `loop`, `for i in a..b`) | `..` and `..=` ranges |
 | `中断`, `続行`, `返却` (chuudan, zokkou, henkyaku: `break`, `continue`, `return`) | |
-| `として` (toshite, `as`) | casts between numbers, `真偽` and `文字` |
+| `として` (toshite, `as`) | casts between numbers (wrapping for integers, saturating from decimals, like `as` in Rust), `真偽` and `文字` to integers, and `非負8` to `文字` |
 | Macros `表示!` `出力!` `異常終了!` `表明!` `整形!` `未実装!` | `{}` placeholders and `{{` `}}` |
-| Types `整32` `非負32` `実64` `真偽` `文字` `文字列` | see below |
+| Number types `整8` `整16` `整32` `整64`, `非負8` `非負16` `非負32` `非負64`, `大きさ` (ookisa, `usize`), `実32` `実64` | integers panic on overflow (exit code 101), like Rust in debug mode; `大きさ` is 64 bits for now |
+| Types `真偽` `文字` `文字列` | boolean, one character, text |
 | Text: `+`, `+=`, `==`, `<`, `.長さ()`, `.バイト数()` | `長さ` (nagasa) counts characters, `バイト数` (baitosuu) counts bytes |
 | Structs: `構造体 点 { x: 整32 }` (kouzoutai, `struct`), literals `点 { x: 1 }`, fields `p.x`, `p.x = 5` | assigning needs `可変` (kahen, `mut`) on the variable |
 | Methods: `実装 点 { ... }` (jissou, `impl`), `点::新()` (associated function), `p.動く()` (method) | first parameter `自分` (jibun, `self`), `&自分`, `&可変 自分`; `自身` (jishin, `Self`) is the struct's own type |
