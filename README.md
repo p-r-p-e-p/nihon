@@ -100,7 +100,7 @@ kansuu shu() {
 | `struct` | 構造体 | `kouzoutai` | Structure |
 | `impl` | 実装 | `jissou` | Implementation |
 | `return` | 返却 | `henkyaku` | Return |
-| `println!` | 表示! | `hyouji!` | Display output |
+| `display!` | 表示! | `hyouji!` | Display output |
 
 ## Getting started
 
@@ -114,23 +114,22 @@ kansuu shu() {
 From the repository root, build and test the compiler:
 
 ```bash
-cd nihonc
-cargo build --release
-cargo test
+cargo build --manifest-path nihonc/Cargo.toml --release
+cargo test --manifest-path nihonc/Cargo.toml
 ```
 
-The compiler is then available at `nihonc/target/release/nihonc` from the repository root. For example:
+Run the compiler through Cargo from the repository root; this avoids relying on a prebuilt binary or its location:
 
 ```bash
 # Check a program without generating an executable
-nihonc/target/release/nihonc --check path/to/file.nihon
+cargo run --manifest-path nihonc/Cargo.toml -- --check path/to/file.nihon
 
 # Print the parsed syntax tree or generated C
-nihonc/target/release/nihonc --ast path/to/file.nihon
-nihonc/target/release/nihonc --emit-c path/to/file.nihon
+cargo run --manifest-path nihonc/Cargo.toml -- --ast path/to/file.nihon
+cargo run --manifest-path nihonc/Cargo.toml -- --emit-c path/to/file.nihon
 
 # Generate and build an executable
-nihonc/target/release/nihonc path/to/file.nihon
+cargo run --manifest-path nihonc/Cargo.toml -- path/to/file.nihon
 ```
 
 For compiler-specific details, supported features, limitations, and tests, see [`nihonc/README.md`](nihonc/README.md).
