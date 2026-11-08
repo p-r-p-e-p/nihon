@@ -218,6 +218,13 @@ const diagsOf = (doc) => collections.get('nihon').get(doc.uri.toString()) || [];
   const plainList = complete('    kan', 7).map((i) => i.label);
   assert.ok(plainList.includes('関数') && plainList.includes('文字列') && plainList.includes('表示!'));
   assert.ok(!plainList.includes('長さ()'));
+  // todos os tipos do compilador aparecem no autocompletar
+  for (const t of ['整8', '整16', '整32', '整64', '非負8', '非負16', '非負32', '非負64', '大きさ', '実32', '実64', '真偽', '文字', '文字列']) {
+    assert.ok(plainList.includes(t), `tipo ${t} ausente do autocompletar`);
+  }
+  // digitar o romaji acha o tipo (filterText)
+  const ookisa = complete('    ook', 7).find((i) => i.label === '大きさ');
+  assert.ok(ookisa && ookisa.filterText.includes('ookisa'));
   assert.ok(complete('    0..', 7).map((i) => i.label).includes('関数')); // `..` (intervalo) não abre a lista de métodos
 
   fs.rmSync(dir, { recursive: true, force: true });

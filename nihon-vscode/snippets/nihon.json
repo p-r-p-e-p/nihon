@@ -129,5 +129,77 @@
     ],
     "body": "定数 ${1:名前}: ${2:整32} = ${3:値};",
     "description": "constant"
+  },
+  "構造体 (kouzoutai)": {
+    "prefix": [
+      "kouzoutai",
+      "構造体"
+    ],
+    "body": [
+      "構造体 ${1:名前} {",
+      "\t${2:x}: ${3:整32},",
+      "}"
+    ],
+    "description": "struct"
+  },
+  "実装 (jissou)": {
+    "prefix": [
+      "jissou",
+      "実装"
+    ],
+    "body": [
+      "実装 ${1:名前} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "impl"
+  },
+  "メソッド (method)": {
+    "prefix": [
+      "kansuu-jibun",
+      "関数-自分"
+    ],
+    "body": [
+      "関数 ${1:名前}(&自分${2}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Method taking &自分"
+  },
+  "他もし (hokamoshi)": {
+    "prefix": [
+      "hokamoshi",
+      "他もし"
+    ],
+    "body": [
+      "他もし ${1:条件} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "else if"
+  },
+  "返却 (henkyaku)": {
+    "prefix": [
+      "henkyaku",
+      "返却"
+    ],
+    "body": "返却 ${1:値};",
+    "description": "return"
+  },
+  "出力! (shutsuryoku)": {
+    "prefix": [
+      "shutsuryoku",
+      "出力"
+    ],
+    "body": "出力!(\"${1:テキスト}\");",
+    "description": "print!"
+  },
+  "整形! (seikei)": {
+    "prefix": [
+      "seikei",
+      "整形"
+    ],
+    "body": "整形!(\"${1:{\\}}\", ${2:値})",
+    "description": "format!"
   }
 }
