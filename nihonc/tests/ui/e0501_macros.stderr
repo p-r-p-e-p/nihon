@@ -1,0 +1,70 @@
+error[E0501]: 2 positional arguments in the format string, but 1 argument was given
+ --> e0501_macros.nihon:2:9
+  |
+2 |     表示!("{} {}", 1);
+  |           ^^^^^^^  - given here
+  |           |
+  |           2 `{}` here
+
+error[E0501]: 1 positional argument in the format string, but 2 arguments were given
+ --> e0501_macros.nihon:3:18
+  |
+3 |     表示!("{}", 1, 2);
+  |           ----     ^ argument never used
+  |           |
+  |           1 `{}` here
+
+error[E0503]: format argument must be a string literal
+ --> e0501_macros.nihon:4:9
+  |
+4 |     表示!(1);
+  |           ^ expected a string literal
+  |
+  = note: the first argument of `表示!` (hyouji!, "println!") is the text, with `{}` for each value
+  = help: write it like this: `表示!("{}", valor)` (hyouji!)
+
+error[E0504]: invalid format string: only `{}` is supported in format strings for now
+ --> e0501_macros.nihon:5:9
+  |
+5 |     表示!("{:?}", 1);
+  |           ^^^^^^ invalid format string
+  |
+  = note: use `{}` where a value goes, and `{{` / `}}` for literal braces
+
+error[E0504]: invalid format string: expected `}` but the string was terminated
+ --> e0501_macros.nihon:6:9
+  |
+6 |     表示!("{", 1);
+  |           ^^^ invalid format string
+  |
+  = note: use `{}` where a value goes, and `{{` / `}}` for literal braces
+
+error[E0502]: cannot find macro `表示あ!` in this scope
+ --> e0501_macros.nihon:7:5
+  |
+7 |     表示あ!("x");
+  |     ^^^^^^ not found
+  |
+  = note: available macros: `表示!` (hyouji, "println"), `出力!` (shutsuryoku, "print"), `異常終了!` (ijoushuuryou, "panic"), `表明!` (hyoumei, "assert"), `整形!` (seikei, "format"), `未実装!` (mijissou, "todo")
+help: a macro with a similar name exists
+  |
+7 |     表示!("x");
+  |     ~~~~
+
+error[E0999]: `整形!` is not supported yet
+ --> e0501_macros.nihon:8:5
+  |
+8 |     整形!("x");
+  |     ^^^^^^^^^^ needs the text type
+  |
+  = note: `整形!` (seikei!, "format!") builds a `文字列` (mojiretsu, "string"), which arrives in stage 1
+
+error[E0999]: text values are not supported yet
+ --> e0501_macros.nihon:9:12
+  |
+9 |     束縛 s = "texto";
+  |              ^^^^^^^ text can only be used as the format string of `表示!` for now
+  |
+  = note: the text type `文字列` (mojiretsu, "string") arrives in stage 1 of the compiler
+
+error: aborting due to 8 previous errors

@@ -29,6 +29,7 @@ fn ui() {
 
         let out = Command::new(env!("CARGO_BIN_EXE_nihonc"))
             .current_dir(&dir)
+            .arg("--check")
             .args(&flags)
             .arg(name)
             .env("NO_COLOR", "1")
