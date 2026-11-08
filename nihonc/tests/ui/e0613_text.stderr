@@ -1,0 +1,59 @@
+error[E0613]: no method named `長` found for type `文字列`
+ --> e0613_text.nihon:3:14
+  |
+3 |     束縛 a = s.長(); 
+  |                ^^ method not found
+  |
+  = note: available methods: `長さ` (nagasa, "length in characters"), `バイト数` (baitosuu, "length in bytes")
+help: a method with a similar name exists
+  |
+3 |     束縛 a = s.長さ(); 
+  |                ~~~~
+
+error[E0302]: this method takes 0 arguments but 1 argument was supplied
+ --> e0613_text.nihon:4:14
+  |
+4 |     束縛 b = s.長さ(1);
+  |                ^^^^ expected 0 arguments
+
+error[E0613]: no method named `長さ` found for type `整32`
+ --> e0613_text.nihon:6:14
+  |
+6 |     束縛 c = n.長さ();
+  |                ^^^^ method not found
+  |
+  = note: only `文字列` (mojiretsu, "text") has methods for now: `長さ` (nagasa, "length in characters"), `バイト数` (baitosuu, "length in bytes")
+
+error[E0617]: cannot add a number to text
+ --> e0613_text.nihon:7:12
+  |
+7 |     束縛 d = s + n;
+  |              ^^^^^ number (`整32`)
+  |              |
+  |              |`+` joins two texts, not a text and a number
+  |              text (`文字列`, mojiretsu)
+  |
+  = help: build the text with `整形!` (seikei!, "format!"), for example `整形!("{}{}", a, b)`
+
+error[E0301]: mismatched types
+ --> e0613_text.nihon:8:17
+  |
+8 |     束縛 e: 整32 = s;
+  |                    ^ expected `整32`, found `文字列`
+  |
+  = note: `整32` (sei32) is a 32-bit signed integer
+  = note: `文字列` (mojiretsu) is a text (UTF-8, immutable)
+
+warning[W0001]: method name `nagasa` is written in latin letters
+ --> e0613_text.nihon:9:14
+  |
+9 |     束縛 f = s.nagasa();
+  |                ^^^^^^ latin spelling of `長さ` ("length in characters")
+  |
+  = note: pass `--romaji` to allow latin keywords
+help: use the canonical form
+  |
+9 |     束縛 f = s.長さ();
+  |                ~~~~
+
+error: aborting due to 5 previous errors; 1 warning emitted

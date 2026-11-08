@@ -155,6 +155,11 @@ pub enum ExprKind {
         callee: Box<Expr>,
         args: Vec<Expr>,
     },
+    MethodCall {
+        recv: Box<Expr>,
+        name: Ident,
+        args: Vec<Expr>,
+    },
     MacroCall {
         name: String,
         name_span: Span,
