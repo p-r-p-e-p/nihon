@@ -22,8 +22,17 @@ use std::collections::HashMap;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Ty {
+    I8,
+    I16,
     I32,
+    I64,
+    U8,
+    U16,
     U32,
+    U64,
+    /// `大きさ`: tamanhos e indices (64 bits por enquanto).
+    Usize,
+    F32,
     F64,
     Bool,
     Char,
@@ -47,8 +56,16 @@ struct TyInfo {
 }
 
 const TYPES: &[TyInfo] = &[
+    TyInfo { ty: Ty::I8, jp: "整8", romaji: "sei8", meaning: "8-bit signed integer" },
+    TyInfo { ty: Ty::I16, jp: "整16", romaji: "sei16", meaning: "16-bit signed integer" },
     TyInfo { ty: Ty::I32, jp: "整32", romaji: "sei32", meaning: "32-bit signed integer" },
+    TyInfo { ty: Ty::I64, jp: "整64", romaji: "sei64", meaning: "64-bit signed integer" },
+    TyInfo { ty: Ty::U8, jp: "非負8", romaji: "hifu8", meaning: "8-bit unsigned integer" },
+    TyInfo { ty: Ty::U16, jp: "非負16", romaji: "hifu16", meaning: "16-bit unsigned integer" },
     TyInfo { ty: Ty::U32, jp: "非負32", romaji: "hifu32", meaning: "32-bit unsigned integer" },
+    TyInfo { ty: Ty::U64, jp: "非負64", romaji: "hifu64", meaning: "64-bit unsigned integer" },
+    TyInfo { ty: Ty::Usize, jp: "大きさ", romaji: "ookisa", meaning: "unsigned integer for sizes and indexes (64-bit for now)" },
+    TyInfo { ty: Ty::F32, jp: "実32", romaji: "jitsu32", meaning: "32-bit floating point" },
     TyInfo { ty: Ty::F64, jp: "実64", romaji: "jitsu64", meaning: "64-bit floating point" },
     TyInfo { ty: Ty::Bool, jp: "真偽", romaji: "shingi", meaning: "boolean" },
     TyInfo { ty: Ty::Char, jp: "文字", romaji: "moji", meaning: "character" },
@@ -58,8 +75,15 @@ const TYPES: &[TyInfo] = &[
 impl Ty {
     fn c(self) -> String {
         match self {
+            Ty::I8 => "int8_t".to_string(),
+            Ty::I16 => "int16_t".to_string(),
             Ty::I32 => "int32_t".to_string(),
+            Ty::I64 => "int64_t".to_string(),
+            Ty::U8 => "uint8_t".to_string(),
+            Ty::U16 => "uint16_t".to_string(),
             Ty::U32 | Ty::Char => "uint32_t".to_string(),
+            Ty::U64 | Ty::Usize => "uint64_t".to_string(),
+            Ty::F32 => "float".to_string(),
             Ty::F64 => "double".to_string(),
             Ty::Bool => "int".to_string(),
             Ty::Str => "nh_str".to_string(),
@@ -71,7 +95,7 @@ impl Ty {
 
     /// Tipos simples: os que valem em contas, comparacoes e constantes.
     fn is_simple(self) -> bool {
-        matches!(self, Ty::I32 | Ty::U32 | Ty::F64 | Ty::Bool | Ty::Char | Ty::Str)
+        self.is_num() || matches!(self, Ty::Bool | Ty::Char | Ty::Str)
     }
 
     fn jp(self) -> &'static str {
@@ -90,17 +114,70 @@ impl Ty {
             Ty::Never | Ty::Err | Ty::Struct(_) | Ty::Ref(..) => String::new(),
             t => {
                 let i = TYPES.iter().find(|i| i.ty == t).unwrap();
-                format!("`{}` ({}) is a {}", i.jp, i.romaji, i.meaning)
+                {
+                    let an = i.meaning.starts_with(|c: char| "8aeiou".contains(c));
+                    format!("`{}` ({}) is {} {}", i.jp, i.romaji, if an { "an" } else { "a" }, i.meaning)
+                }
             }
         }
     }
 
+    /// `(com sinal, bits)` dos inteiros.
+    fn int_info(self) -> Option<(bool, u32)> {
+        Some(match self {
+            Ty::I8 => (true, 8),
+            Ty::I16 => (true, 16),
+            Ty::I32 => (true, 32),
+            Ty::I64 => (true, 64),
+            Ty::U8 => (false, 8),
+            Ty::U16 => (false, 16),
+            Ty::U32 => (false, 32),
+            Ty::U64 | Ty::Usize => (false, 64),
+            _ => return None,
+        })
+    }
+
     fn is_int(self) -> bool {
-        matches!(self, Ty::I32 | Ty::U32)
+        self.int_info().is_some()
+    }
+
+    fn is_signed(self) -> bool {
+        matches!(self.int_info(), Some((true, _)))
+    }
+
+    fn is_float(self) -> bool {
+        matches!(self, Ty::F32 | Ty::F64)
     }
 
     fn is_num(self) -> bool {
-        matches!(self, Ty::I32 | Ty::U32 | Ty::F64)
+        self.is_int() || self.is_float()
+    }
+
+    /// Menor e maior valor de um inteiro.
+    fn int_range(self) -> (i128, i128) {
+        let (signed, bits) = self.int_info().expect("tipo inteiro");
+        if signed {
+            (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1)
+        } else {
+            (0, (1i128 << bits) - 1)
+        }
+    }
+
+    /// Sufixo dos nomes das funcoes do runtime (`nh_add_i8`...).
+    fn suffix(self) -> &'static str {
+        match self {
+            Ty::I8 => "i8",
+            Ty::I16 => "i16",
+            Ty::I32 => "i32",
+            Ty::I64 => "i64",
+            Ty::U8 => "u8",
+            Ty::U16 => "u16",
+            Ty::U32 => "u32",
+            Ty::U64 => "u64",
+            Ty::Usize => "usize",
+            Ty::F32 => "f32",
+            _ => "f64",
+        }
     }
 
     fn has_value(self) -> bool {
@@ -194,20 +271,62 @@ enum MacroKind {
 #[derive(Clone, Debug)]
 enum CV {
     S(String),
-    I(i32),
-    U(u32),
-    F(f64),
+    I(i128, Ty),
+    /// Os `实32` ja vem arredondados para `f32`.
+    F(f64, Ty),
     B(bool),
     C(char),
+}
+
+/// O literal inteiro em C.
+fn int_c(v: i128, ty: Ty) -> String {
+    let (signed, bits) = ty.int_info().expect("tipo inteiro");
+    let (lo, _) = ty.int_range();
+    if !signed {
+        return if bits == 64 { format!("UINT64_C({})", v) } else { format!("{}u", v) };
+    }
+    if bits == 64 {
+        if v == lo {
+            "(-INT64_C(9223372036854775807)-1)".to_string()
+        } else if v < 0 {
+            format!("(-INT64_C({}))", -v)
+        } else {
+            format!("INT64_C({})", v)
+        }
+    } else if v == lo {
+        format!("(-{}-1)", -lo - 1)
+    } else if v < 0 {
+        format!("({})", v)
+    } else {
+        v.to_string()
+    }
+}
+
+/// O valor depois de dar a volta (como o `as` do Rust) para caber no tipo.
+fn wrap_int(v: i128, ty: Ty) -> i128 {
+    let (signed, bits) = ty.int_info().expect("tipo inteiro");
+    let m = 1i128 << bits;
+    let r = v.rem_euclid(m);
+    if signed && r >= m / 2 {
+        r - m
+    } else {
+        r
+    }
+}
+
+fn round_to(v: f64, ty: Ty) -> f64 {
+    if ty == Ty::F32 {
+        v as f32 as f64
+    } else {
+        v
+    }
 }
 
 impl CV {
     fn ty(&self) -> Ty {
         match self {
             CV::S(_) => Ty::Str,
-            CV::I(_) => Ty::I32,
-            CV::U(_) => Ty::U32,
-            CV::F(_) => Ty::F64,
+            CV::I(_, t) | CV::F(_, t) => *t,
             CV::B(_) => Ty::Bool,
             CV::C(_) => Ty::Char,
         }
@@ -216,14 +335,12 @@ impl CV {
     fn to_c(&self) -> String {
         match self {
             CV::S(t) => format!("((nh_str){{\"{}\", {}}})", c_escape(t), t.len()),
-            CV::I(v) if *v == i32::MIN => "(-2147483647-1)".to_string(),
-            CV::I(v) if *v < 0 => format!("({})", v),
-            CV::I(v) => v.to_string(),
-            CV::U(v) => format!("{}u", v),
-            CV::F(v) if v.is_nan() => "NAN".to_string(),
-            CV::F(v) if *v == f64::INFINITY => "INFINITY".to_string(),
-            CV::F(v) if *v == f64::NEG_INFINITY => "(-INFINITY)".to_string(),
-            CV::F(v) => format!("({:?})", v),
+            CV::I(v, t) => int_c(*v, *t),
+            CV::F(v, _) if v.is_nan() => "NAN".to_string(),
+            CV::F(v, _) if *v == f64::INFINITY => "INFINITY".to_string(),
+            CV::F(v, _) if *v == f64::NEG_INFINITY => "(-INFINITY)".to_string(),
+            CV::F(v, Ty::F32) => format!("({:?}f)", *v as f32),
+            CV::F(v, _) => format!("({:?})", v),
             CV::B(v) => if *v { "1" } else { "0" }.to_string(),
             CV::C(c) => format!("((uint32_t){})", *c as u32),
         }
@@ -618,7 +735,7 @@ impl<'a, 'h> Cg<'a, 'h> {
                 d = d.note(n);
             }
         }
-        let int_lit_as_float = lit.map_or(false, |x| expected == Ty::F64 && matches!(x.kind, ExprKind::Int(_)));
+        let int_lit_as_float = lit.map_or(false, |x| expected.is_float() && matches!(x.kind, ExprKind::Int(_)));
         if int_lit_as_float {
             d = d.suggest(
                 "a float literal needs a decimal point",
@@ -1102,11 +1219,16 @@ impl<'a, 'h> Cg<'a, 'h> {
         match &e.kind {
             ExprKind::Int(n) => {
                 let ty = self.lit_tys.get(&e.span.start).copied().unwrap_or(Ty::I32);
-                Some(if ty == Ty::U32 { CV::U(*n as u32) } else { CV::I(*n as i32) })
+                Some(CV::I(*n as i128, ty))
             }
             ExprKind::Float(s) => {
                 let t: String = s.chars().filter(|c| *c != '_').collect();
-                Some(CV::F(t.parse::<f64>().ok()?))
+                let ty = self.lit_tys.get(&e.span.start).copied().unwrap_or(Ty::F64);
+                if ty == Ty::F32 {
+                    Some(CV::F(t.parse::<f32>().ok()? as f64, ty))
+                } else {
+                    Some(CV::F(t.parse::<f64>().ok()?, ty))
+                }
             }
             ExprKind::Bool(b) => Some(CV::B(*b)),
             ExprKind::Char(c) => Some(CV::C(*c)),
@@ -1116,16 +1238,19 @@ impl<'a, 'h> Cg<'a, 'h> {
             ExprKind::Unary { op, expr } => {
                 if let (UnOp::Neg, ExprKind::Int(n)) = (op, &expr.kind) {
                     let ty = self.lit_tys.get(&e.span.start).copied().unwrap_or(Ty::I32);
-                    let _ = ty;
-                    return Some(CV::I((-(*n as i64)) as i32));
+                    return Some(CV::I(-(*n as i128), ty));
                 }
                 let v = self.eval(expr, asts, memo)?;
                 match (op, v) {
-                    (UnOp::Neg, CV::I(a)) => match a.checked_neg() {
-                        Some(r) => Some(CV::I(r)),
-                        None => self.eval_fail(e.span, "attempt to negate with overflow"),
-                    },
-                    (UnOp::Neg, CV::F(a)) => Some(CV::F(-a)),
+                    (UnOp::Neg, CV::I(a, t)) => {
+                        let (lo, hi) = t.int_range();
+                        if -a >= lo && -a <= hi {
+                            Some(CV::I(-a, t))
+                        } else {
+                            self.eval_fail(e.span, "attempt to negate with overflow")
+                        }
+                    }
+                    (UnOp::Neg, CV::F(a, t)) => Some(CV::F(-a, t)),
                     (UnOp::Not, CV::B(a)) => Some(CV::B(!a)),
                     _ => None,
                 }
@@ -1144,22 +1269,27 @@ impl<'a, 'h> Cg<'a, 'h> {
             ExprKind::Cast { expr, ty } => {
                 let v = self.eval(expr, asts, memo)?;
                 let target = TYPES.iter().find(|i| i.jp == ty.name || i.romaji == ty.name)?.ty;
-                let as_i64 = |v: &CV| -> Option<i64> {
+                let as_int = |v: &CV| -> Option<i128> {
                     Some(match v {
-                        CV::I(a) => *a as i64,
-                        CV::U(a) => *a as i64,
-                        CV::B(a) => *a as i64,
-                        CV::C(a) => *a as i64,
-                        CV::F(_) | CV::S(_) => return None,
+                        CV::I(a, _) => *a,
+                        CV::B(a) => *a as i128,
+                        CV::C(a) => *a as i128,
+                        CV::F(..) | CV::S(_) => return None,
                     })
                 };
                 Some(match (v, target) {
-                    (CV::F(a), Ty::I32) => CV::I(a as i32),
-                    (CV::F(a), Ty::U32) => CV::U(a as u32),
-                    (CV::F(a), Ty::F64) => CV::F(a),
-                    (v, Ty::F64) => CV::F(as_i64(&v)? as f64),
-                    (v, Ty::I32) => CV::I(as_i64(&v)? as i32),
-                    (v, Ty::U32) => CV::U(as_i64(&v)? as u32),
+                    (CV::F(a, _), t) if t.is_int() => {
+                        let (lo, hi) = t.int_range();
+                        // `f64 as i128` satura e leva NaN a 0, como o `as` do Rust
+                        CV::I((a as i128).clamp(lo, hi), t)
+                    }
+                    (CV::F(a, _), t) if t.is_float() => CV::F(round_to(a, t), t),
+                    (v, t) if t.is_float() => {
+                        let i = as_int(&v)?;
+                        CV::F(if t == Ty::F32 { i as f32 as f64 } else { i as f64 }, t)
+                    }
+                    (v, t) if t.is_int() => CV::I(wrap_int(as_int(&v)?, t), t),
+                    (CV::I(a, Ty::U8), Ty::Char) => CV::C(a as u8 as char),
                     (v, t) if v.ty() == t => v,
                     _ => return None,
                 })
@@ -1208,60 +1338,58 @@ impl<'a, 'h> Cg<'a, 'h> {
         use BinOp::*;
         let overflow = |this: &mut Self, what: &str| this.eval_fail(span, &format!("attempt to {} with overflow", what));
         match (l, r) {
-            (CV::I(a), CV::I(b)) => match op {
-                Add => a.checked_add(b).map(CV::I).or_else(|| overflow(self, "add").map(|_| CV::I(0))),
-                Sub => a.checked_sub(b).map(CV::I).or_else(|| overflow(self, "subtract").map(|_| CV::I(0))),
-                Mul => a.checked_mul(b).map(CV::I).or_else(|| overflow(self, "multiply").map(|_| CV::I(0))),
-                Div | Rem => {
-                    if b == 0 {
-                        return self.eval_fail(span, if op == Div { "attempt to divide by zero" } else { "attempt to calculate the remainder with a divisor of zero" });
+            (CV::I(a, ta), CV::I(b, tb)) if ta == tb => {
+                let (lo, hi) = ta.int_range();
+                let fits = |v: i128| v >= lo && v <= hi;
+                let int = |v: i128| CV::I(v, ta);
+                match op {
+                    Add => match a.checked_add(b).filter(|v| fits(*v)) {
+                        Some(v) => Some(int(v)),
+                        None => overflow(self, "add"),
+                    },
+                    Sub => match a.checked_sub(b).filter(|v| fits(*v)) {
+                        Some(v) => Some(int(v)),
+                        None => overflow(self, "subtract"),
+                    },
+                    Mul => match a.checked_mul(b).filter(|v| fits(*v)) {
+                        Some(v) => Some(int(v)),
+                        None => overflow(self, "multiply"),
+                    },
+                    Div | Rem => {
+                        if b == 0 {
+                            return self.eval_fail(span, if op == Div { "attempt to divide by zero" } else { "attempt to calculate the remainder with a divisor of zero" });
+                        }
+                        if ta.is_signed() && a == lo && b == -1 {
+                            return overflow(self, if op == Div { "divide" } else { "calculate the remainder" });
+                        }
+                        Some(int(if op == Div { a / b } else { a % b }))
                     }
-                    let r = if op == Div { a.checked_div(b) } else { a.checked_rem(b) };
-                    match r {
-                        Some(v) => Some(CV::I(v)),
-                        None => overflow(self, "divide"),
-                    }
+                    Eq => Some(CV::B(a == b)),
+                    Ne => Some(CV::B(a != b)),
+                    Lt => Some(CV::B(a < b)),
+                    Gt => Some(CV::B(a > b)),
+                    Le => Some(CV::B(a <= b)),
+                    Ge => Some(CV::B(a >= b)),
+                    _ => None,
                 }
-                Eq => Some(CV::B(a == b)),
-                Ne => Some(CV::B(a != b)),
-                Lt => Some(CV::B(a < b)),
-                Gt => Some(CV::B(a > b)),
-                Le => Some(CV::B(a <= b)),
-                Ge => Some(CV::B(a >= b)),
-                _ => None,
-            },
-            (CV::U(a), CV::U(b)) => match op {
-                Add => a.checked_add(b).map(CV::U).or_else(|| overflow(self, "add").map(|_| CV::U(0))),
-                Sub => a.checked_sub(b).map(CV::U).or_else(|| overflow(self, "subtract").map(|_| CV::U(0))),
-                Mul => a.checked_mul(b).map(CV::U).or_else(|| overflow(self, "multiply").map(|_| CV::U(0))),
-                Div | Rem => {
-                    if b == 0 {
-                        return self.eval_fail(span, if op == Div { "attempt to divide by zero" } else { "attempt to calculate the remainder with a divisor of zero" });
-                    }
-                    Some(CV::U(if op == Div { a / b } else { a % b }))
+            }
+            (CV::F(a, ta), CV::F(b, tb)) if ta == tb => {
+                let f = |v: f64| CV::F(round_to(v, ta), ta);
+                match op {
+                    Add => Some(f(a + b)),
+                    Sub => Some(f(a - b)),
+                    Mul => Some(f(a * b)),
+                    Div => Some(f(a / b)),
+                    Rem => Some(f(a % b)),
+                    Eq => Some(CV::B(a == b)),
+                    Ne => Some(CV::B(a != b)),
+                    Lt => Some(CV::B(a < b)),
+                    Gt => Some(CV::B(a > b)),
+                    Le => Some(CV::B(a <= b)),
+                    Ge => Some(CV::B(a >= b)),
+                    _ => None,
                 }
-                Eq => Some(CV::B(a == b)),
-                Ne => Some(CV::B(a != b)),
-                Lt => Some(CV::B(a < b)),
-                Gt => Some(CV::B(a > b)),
-                Le => Some(CV::B(a <= b)),
-                Ge => Some(CV::B(a >= b)),
-                _ => None,
-            },
-            (CV::F(a), CV::F(b)) => match op {
-                Add => Some(CV::F(a + b)),
-                Sub => Some(CV::F(a - b)),
-                Mul => Some(CV::F(a * b)),
-                Div => Some(CV::F(a / b)),
-                Rem => Some(CV::F(a % b)),
-                Eq => Some(CV::B(a == b)),
-                Ne => Some(CV::B(a != b)),
-                Lt => Some(CV::B(a < b)),
-                Gt => Some(CV::B(a > b)),
-                Le => Some(CV::B(a <= b)),
-                Ge => Some(CV::B(a >= b)),
-                _ => None,
-            },
+            }
             (CV::B(a), CV::B(b)) => match op {
                 And => Some(CV::B(a && b)),
                 Or => Some(CV::B(a || b)),
@@ -1870,19 +1998,27 @@ impl<'a, 'h> Cg<'a, 'h> {
         match &e.kind {
             ExprKind::Int(n) => {
                 let ty = match expect {
-                    Some(t @ (Ty::I32 | Ty::U32)) => t,
+                    Some(t) if t.is_int() => t,
                     _ => Ty::I32,
                 };
                 self.int_lit(*n, false, ty, span)
             }
             ExprKind::Float(s) => {
+                let ty = match expect {
+                    Some(t) if t.is_float() => t,
+                    _ => Ty::F64,
+                };
+                self.lit_tys.insert(span.start, ty);
                 let mut t: String = s.chars().filter(|c| *c != '_').collect();
                 if !t.contains(['.', 'e', 'E']) {
                     t.push_str(".0");
                 }
+                if ty == Ty::F32 {
+                    t.push('f');
+                }
                 Val {
                     c: t,
-                    ty: Ty::F64,
+                    ty,
                     span,
                 }
             }
@@ -1994,27 +2130,22 @@ impl<'a, 'h> Cg<'a, 'h> {
 
     fn int_lit(&mut self, n: u128, neg: bool, ty: Ty, span: Span) -> Val {
         self.lit_tys.insert(span.start, ty);
-        let (ok, c) = match ty {
-            Ty::U32 => (n <= u32::MAX as u128, format!("{}u", n)),
+        let (lo, hi) = ty.int_range();
+        let v = if n > i128::MAX as u128 { None } else { Some(if neg { -(n as i128) } else { n as i128 }) };
+        match v {
+            Some(v) if v >= lo && v <= hi => Val {
+                c: int_c(v, ty),
+                ty,
+                span,
+            },
             _ => {
-                if neg && n == 2147483648 {
-                    (true, "(-2147483647-1)".to_string())
-                } else if neg {
-                    (n <= 2147483647, format!("(-{})", n))
-                } else {
-                    (n <= 2147483647, format!("{}", n))
-                }
+                let d = Diagnostic::error(E0306, "integer literal is out of range")
+                    .primary(span, format!("does not fit in {}", self.bt(ty)))
+                    .note(format!("the range of {} is {} to {}", self.bt(ty), lo, hi));
+                self.emit(d);
+                self.err_val(span)
             }
-        };
-        if !ok {
-            let (lo, hi) = if ty == Ty::U32 { ("0", "4294967295") } else { ("-2147483648", "2147483647") };
-            let d = Diagnostic::error(E0306, "integer literal is out of range")
-                .primary(span, format!("does not fit in {}", self.bt(ty)))
-                .note(format!("the range of {} is {} to {}", self.bt(ty), lo, hi));
-            self.emit(d);
-            return self.err_val(span);
         }
-        Val { c, ty, span }
     }
 
     fn gen_path(&mut self, id: &Ident) -> Val {
@@ -2064,11 +2195,11 @@ impl<'a, 'h> Cg<'a, 'h> {
                 // `-2147483648` e um literal valido
                 if let ExprKind::Int(n) = &inner.kind {
                     let ty = match expect {
-                        Some(t @ (Ty::I32 | Ty::U32)) => t,
+                        Some(t) if t.is_int() => t,
                         _ => Ty::I32,
                     };
-                    if ty == Ty::U32 {
-                        return self.bad_unary("-", Ty::U32, span, inner.span);
+                    if !ty.is_signed() {
+                        return self.bad_unary("-", ty, span, inner.span);
                     }
                     let mut v = self.int_lit(*n, true, ty, span);
                     v.span = span;
@@ -2076,15 +2207,15 @@ impl<'a, 'h> Cg<'a, 'h> {
                 }
                 let v = self.gen_expr(inner, expect);
                 match v.ty {
-                    Ty::I32 => {
+                    ty if ty.is_signed() => {
                         let t = self.tmp();
                         let loc = self.loc(span);
-                        self.line(format!("int32_t {} = nh_neg_i32({}, \"{}\");", t, v.c, loc));
-                        Val { c: t, ty: Ty::I32, span }
+                        self.line(format!("{} {} = nh_neg_{}({}, \"{}\");", ty.c(), t, ty.suffix(), v.c, loc));
+                        Val { c: t, ty, span }
                     }
-                    Ty::F64 => Val {
+                    ty if ty.is_float() => Val {
                         c: format!("(-{})", v.c),
-                        ty: Ty::F64,
+                        ty,
                         span,
                     },
                     Ty::Err | Ty::Never => Val { span, ..v },
@@ -2112,7 +2243,7 @@ impl<'a, 'h> Cg<'a, 'h> {
             format!("cannot apply unary operator `{}` to type {}", op, self.bt(t)),
         )
         .primary(span, format!("cannot apply `{}` to {}", op, self.bt(t)));
-        if t == Ty::U32 && op == "-" {
+        if t.is_int() && !t.is_signed() && op == "-" {
             d = d.note("unsigned numbers cannot be negative");
         }
         if op == "!" {
@@ -2237,9 +2368,9 @@ impl<'a, 'h> Cg<'a, 'h> {
             return None;
         }
         let ty = l.ty;
-        if ty == Ty::F64 {
+        if ty.is_float() {
             let c = match op {
-                BinOp::Rem => format!("fmod({}, {})", l.c, r.c),
+                BinOp::Rem => format!("{}({}, {})", if ty == Ty::F32 { "fmodf" } else { "fmod" }, l.c, r.c),
                 _ => format!("({} {} {})", l.c, Self::op_str(op), r.c),
             };
             return Some(Val { c, ty, span });
@@ -2251,7 +2382,7 @@ impl<'a, 'h> Cg<'a, 'h> {
             BinOp::Div => "div",
             _ => "rem",
         };
-        let suffix = if ty == Ty::I32 { "i32" } else { "u32" };
+        let suffix = ty.suffix();
         let t = self.tmp();
         let loc = self.loc(span);
         self.line(format!(
@@ -2342,8 +2473,9 @@ impl<'a, 'h> Cg<'a, 'h> {
         let from = v.ty;
         let ok = match (from, target) {
             (a, b) if a.is_int() && b.is_num() => true,
-            (Ty::F64, b) if b.is_num() => true,
+            (a, b) if a.is_float() && b.is_num() => true,
             (Ty::Bool | Ty::Char, b) if b.is_int() => true,
+            (Ty::U8, Ty::Char) => true,
             (a, b) if a == b => true,
             _ => false,
         };
@@ -2353,14 +2485,13 @@ impl<'a, 'h> Cg<'a, 'h> {
                 format!("cannot cast {} as {}", self.bt(from), self.bt(target)),
             )
             .primary(span, "invalid cast");
-            d = d.note("`として` (toshite, \"as\") converts between numbers; `真偽` and `文字` can only become integers");
+            d = d.note("`として` (toshite, \"as\") converts between numbers; `真偽` and `文字` can only become integers, and only `非負8` can become a `文字`");
             self.emit(d);
             return self.err_val(span);
         }
         let c = match (from, target) {
-            (Ty::F64, Ty::I32) => format!("nh_f2i32({})", v.c),
-            (Ty::F64, Ty::U32) => format!("nh_f2u32({})", v.c),
-            (_, Ty::F64) => format!("((double){})", v.c),
+            (f, t) if f.is_float() && t.is_int() => format!("nh_f2{}((double){})", t.suffix(), v.c),
+            (_, t) if t.is_float() => format!("(({}){})", t.c(), v.c),
             (a, b) if a == b => v.c,
             _ => format!("(({}){})", target.c(), v.c),
         };
@@ -3112,8 +3243,9 @@ impl<'a, 'h> Cg<'a, 'h> {
                     let v = &vals[vi];
                     vi += 1;
                     let f = match v.ty {
-                        Ty::I32 => "i32",
-                        Ty::U32 => "u32",
+                        t if t.is_signed() => "i64",
+                        t if t.is_int() => "u64",
+                        Ty::F32 => "f32",
                         Ty::F64 => "f64",
                         Ty::Bool => "bool",
                         Ty::Char => "char",
@@ -3411,25 +3543,46 @@ static T nh_rem_##N(T a, T b, const char *l) { \
 if (b == 0) nh_panic_msg(l, "attempt to calculate the remainder with a divisor of zero"); \
 if (MINV != 0 && a == MINV && b == (T)-1) nh_panic_msg(l, "attempt to calculate the remainder with overflow"); \
 return a % b; }
+NH_ARITH(int8_t, i8, INT8_MIN)
+NH_ARITH(int16_t, i16, INT16_MIN)
 NH_ARITH(int32_t, i32, INT32_MIN)
+NH_ARITH(int64_t, i64, INT64_MIN)
+NH_ARITH(uint8_t, u8, 0)
+NH_ARITH(uint16_t, u16, 0)
 NH_ARITH(uint32_t, u32, 0)
+NH_ARITH(uint64_t, u64, 0)
+NH_ARITH(uint64_t, usize, 0)
 
-static int32_t nh_neg_i32(int32_t a, const char *l) {
-if (a == INT32_MIN) nh_panic_msg(l, "attempt to negate with overflow");
-return -a;
-}
+#define NH_NEG(T, N, MINV) \
+static T nh_neg_##N(T a, const char *l) { \
+if (a == MINV) nh_panic_msg(l, "attempt to negate with overflow"); \
+return (T)-a; }
+NH_NEG(int8_t, i8, INT8_MIN)
+NH_NEG(int16_t, i16, INT16_MIN)
+NH_NEG(int32_t, i32, INT32_MIN)
+NH_NEG(int64_t, i64, INT64_MIN)
 
-static int32_t nh_f2i32(double x) {
-if (x != x) return 0;
-if (x <= -2147483648.0) return INT32_MIN;
-if (x >= 2147483647.0) return INT32_MAX;
-return (int32_t)x;
-}
-static uint32_t nh_f2u32(double x) {
-if (x != x || x <= 0.0) return 0;
-if (x >= 4294967295.0) return UINT32_MAX;
-return (uint32_t)x;
-}
+/* float to integer: saturates, and NaN becomes 0 (like `as` in Rust) */
+#define NH_F2S(T, N, MINV, MAXV) \
+static T nh_f2##N(double x) { \
+if (x != x) return 0; \
+if (x <= (double)MINV) return MINV; \
+if (x >= -(double)MINV) return MAXV; \
+return (T)x; }
+#define NH_F2U(T, N, MAXV) \
+static T nh_f2##N(double x) { \
+if (x != x || x <= 0.0) return 0; \
+if (x >= (double)MAXV) return MAXV; \
+return (T)x; }
+NH_F2S(int8_t, i8, INT8_MIN, INT8_MAX)
+NH_F2S(int16_t, i16, INT16_MIN, INT16_MAX)
+NH_F2S(int32_t, i32, INT32_MIN, INT32_MAX)
+NH_F2S(int64_t, i64, INT64_MIN, INT64_MAX)
+NH_F2U(uint8_t, u8, UINT8_MAX)
+NH_F2U(uint16_t, u16, UINT16_MAX)
+NH_F2U(uint32_t, u32, UINT32_MAX)
+NH_F2U(uint64_t, u64, UINT64_MAX)
+NH_F2U(uint64_t, usize, UINT64_MAX)
 
 /* ---- output: a file (stdout, stderr) or a growing buffer (for the text of format) ---- */
 static void nh_oom(void) {
@@ -3459,8 +3612,8 @@ return s;
 
 static void nh_w_lit(nh_out *o, const char *s, size_t n) { nh_put(o, s, n); }
 static void nh_w_str(nh_out *o, nh_str s) { nh_put(o, s.p, s.n); }
-static void nh_w_i32(nh_out *o, int32_t v) { char b[16]; int n = snprintf(b, sizeof b, "%" PRId32, v); nh_put(o, b, (size_t)n); }
-static void nh_w_u32(nh_out *o, uint32_t v) { char b[16]; int n = snprintf(b, sizeof b, "%" PRIu32, v); nh_put(o, b, (size_t)n); }
+static void nh_w_i64(nh_out *o, int64_t v) { char b[32]; int n = snprintf(b, sizeof b, "%" PRId64, v); nh_put(o, b, (size_t)n); }
+static void nh_w_u64(nh_out *o, uint64_t v) { char b[32]; int n = snprintf(b, sizeof b, "%" PRIu64, v); nh_put(o, b, (size_t)n); }
 static void nh_w_bool(nh_out *o, int v) {
 if (v) nh_put(o, "\xe7\x9c\x9f (shin)", 10); else nh_put(o, "\xe5\x81\xbd (gi)", 8);
 }
@@ -3474,7 +3627,7 @@ else { b[0] = (char)(0xF0 | (c >> 18)); b[1] = (char)(0x80 | ((c >> 12) & 0x3F))
 nh_put(o, b, n);
 }
 /* shortest text that reads back as the same number, never in scientific notation (like Rust) */
-static void nh_w_f64(nh_out *o, double v) {
+static void nh_w_fl(nh_out *o, double v, int is32) {
 char buf[48], digits[32], out[400];
 int p, n = 0, i, neg = 0, e10, pos;
 size_t k = 0;
@@ -3484,7 +3637,7 @@ if (v == INFINITY) { nh_put(o, "inf", 3); return; }
 if (v == -INFINITY) { nh_put(o, "-inf", 4); return; }
 for (p = 0; p < 17; p++) {
 snprintf(buf, sizeof buf, "%.*e", p, v);
-if (strtod(buf, NULL) == v) break;
+if (is32 ? (strtof(buf, NULL) == (float)v) : (strtod(buf, NULL) == v)) break;
 }
 s = buf;
 if (*s == '-') { neg = 1; s++; }
@@ -3508,6 +3661,8 @@ memcpy(out + k, digits + pos, (size_t)(n - pos)); k += (size_t)(n - pos);
 }
 nh_put(o, out, k);
 }
+static void nh_w_f64(nh_out *o, double v) { nh_w_fl(o, v, 0); }
+static void nh_w_f32(nh_out *o, float v) { nh_w_fl(o, (double)v, 1); }
 
 /* ---- text ---- */
 static int nh_str_cmp(nh_str a, nh_str b) {

@@ -31,7 +31,7 @@ The project is in early development. The compiler is written in Rust, with no ex
 ## Current status
 
 - **Compiler:** stage 0 plus the first part of stage 1. It parses programs, checks names, types and mutability, and generates C.
-- **Supported subset:** functions, constants, bindings, control flow, structs with methods (`構造体`, `実装`), references `&` and `&可変` (without a borrow checker yet), the types `整32`, `非負32`, `実64`, `真偽`, `文字` and `文字列` (text), and the macros `表示!`, `出力!`, `異常終了!`, `表明!`, `整形!` and `未実装!`. See [`nihonc/README.md`](nihonc/README.md) for the details and current limitations.
+- **Supported subset:** functions, constants, bindings, control flow, structs with methods (`構造体`, `実装`), references `&` and `&可変` (without a borrow checker yet), the number types (`整8` to `整64`, `非負8` to `非負64`, `大きさ`, `実32`, `実64`), `真偽`, `文字` and `文字列` (text), and the macros `表示!`, `出力!`, `異常終了!`, `表明!`, `整形!` and `未実装!`. See [`nihonc/README.md`](nihonc/README.md) for the details and current limitations.
 - **Not yet supported:** enums, `照合` (pattern matching), `任意` and `結果` (optional values and results), arrays, and tuples. These are the rest of stage 1.
 - **Editor support:** `--message-format=json` already prints diagnostics for editors; the VS Code plugin is planned.
 - **Syntax and grammar:** experimental and subject to change.
@@ -129,7 +129,17 @@ kansuu shu() {
 | `println!` | 表示! | `hyouji!` | Display output with a new line |
 | `print!` | 出力! | `shutsuryoku!` | Output without a new line |
 
-Types: `整32` (`sei32`, 32-bit integer), `非負32` (`hifu32`, unsigned 32-bit integer), `実64` (`jitsu64`, 64-bit decimal), `真偽` (`shingi`, boolean), `文字` (`moji`, one character), `文字列` (`mojiretsu`, text).
+Types:
+
+| Rust | Nihon | Romaji | Meaning |
+|---|---|---|---|
+| `i8` `i16` `i32` `i64` | `整8` `整16` `整32` `整64` | `sei8` `sei16` `sei32` `sei64` | Signed integers (sei = whole number) |
+| `u8` `u16` `u32` `u64` | `非負8` `非負16` `非負32` `非負64` | `hifu8` `hifu16` `hifu32` `hifu64` | Unsigned integers (hifu = not negative) |
+| `usize` | `大きさ` | `ookisa` | Sizes and indexes (ookisa = size); 64 bits for now |
+| `f32` `f64` | `実32` `実64` | `jitsu32` `jitsu64` | Decimal numbers (jitsu = real number) |
+| `bool` | `真偽` | `shingi` | Boolean |
+| `char` | `文字` | `moji` | One character |
+| `String` | `文字列` | `mojiretsu` | Text |
 
 ## Getting started
 
