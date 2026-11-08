@@ -15,7 +15,7 @@ Language support for **Nihon**, a Rust-style programming language written in kan
 
 ## Features
 
-- **Syntax highlighting** for kanji, kana and romaji keywords, types (`整32`/`sei32`, `文字列`/`mojiretsu`…), methods (`texto.長さ()`), macros (`表示!`), numbers, strings, characters and nested block comments.
+- **Syntax highlighting** for kanji, kana and romaji keywords, types (`整8`…`整64`, `非負8`…`非負64`, `大きさ`, `実32`/`実64`, `真偽`, `文字`, `文字列` and their romaji forms), methods (`texto.長さ()`), macros (`表示!`), numbers, strings, characters and nested block comments.
 - **Full-width character detection:** zenkaku punctuation, digits and letters (`；`, `１`, `（`…) are underlined in red, mirroring compiler error E0002. Half-width katakana is flagged like warning W0005.
 - **Live diagnostics:** errors and warnings from `nihonc` appear as you type (after a short pause), with error codes, notes and help text.
 - **Quick fixes:** press `Ctrl+.` on a diagnostic to apply the compiler's own suggestion, for example:

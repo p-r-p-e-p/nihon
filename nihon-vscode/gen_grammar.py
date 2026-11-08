@@ -23,7 +23,10 @@ macros = [("表示","hyouji"),("出力","shutsuryoku"),("異常終了","ijoushuu
 # (jp, romaji) — tabela TYPES do codegen_c.rs
 # metodos: tabela METHODS de gen_method (so existem em 文字列 por enquanto)
 methods = [("長さ","nagasa"),("バイト数","baitosuu")]
-types = [("整32","sei32"),("非負32","hifu32"),("実64","jitsu64"),("真偽","shingi"),("文字","moji"),("文字列","mojiretsu")]
+types = [("整8","sei8"),("整16","sei16"),("整32","sei32"),("整64","sei64"),
+         ("非負8","hifu8"),("非負16","hifu16"),("非負32","hifu32"),("非負64","hifu64"),
+         ("大きさ","ookisa"),("実32","jitsu32"),("実64","jitsu64"),
+         ("真偽","shingi"),("文字","moji"),("文字列","mojiretsu")]
 
 flat = lambda pairs: [w for p in pairs for w in p]
 

@@ -24,9 +24,14 @@ const MACROS = [
   ['表明', 'hyoumei', 'assert'], ['整形', 'seikei', 'format'], ['未実装', 'mijissou', 'todo'],
 ];
 const TYPES = [
-  ['整32', 'sei32', '32-bit signed integer'], ['非負32', 'hifu32', '32-bit unsigned integer'],
-  ['実64', 'jitsu64', '64-bit floating point'], ['真偽', 'shingi', 'boolean'],
-  ['文字', 'moji', 'character'], ['文字列', 'mojiretsu', 'text (UTF-8, immutable)'],
+  ['整8', 'sei8', '8-bit signed integer'], ['整16', 'sei16', '16-bit signed integer'],
+  ['整32', 'sei32', '32-bit signed integer'], ['整64', 'sei64', '64-bit signed integer'],
+  ['非負8', 'hifu8', '8-bit unsigned integer'], ['非負16', 'hifu16', '16-bit unsigned integer'],
+  ['非負32', 'hifu32', '32-bit unsigned integer'], ['非負64', 'hifu64', '64-bit unsigned integer'],
+  ['大きさ', 'ookisa', 'unsigned integer for sizes and indexes (64-bit for now)'],
+  ['実32', 'jitsu32', '32-bit floating point'], ['実64', 'jitsu64', '64-bit floating point'],
+  ['真偽', 'shingi', 'boolean'], ['文字', 'moji', 'character'],
+  ['文字列', 'mojiretsu', 'text (UTF-8, immutable)'],
 ];
 // métodos: tabela METHODS de gen_method (codegen_c.rs); só `文字列` tem métodos por enquanto
 const METHODS = [
@@ -364,4 +369,8 @@ function deactivate() {
   }
 }
 
-module.exports = { activate, deactivate, _internals: { check, codeActions, fixAllEdit, fixStore } };
+module.exports = {
+  activate,
+  deactivate,
+  _internals: { check, codeActions, fixAllEdit, fixStore, tables: { KEYWORDS, MACROS, TYPES, METHODS } },
+};
