@@ -1,0 +1,46 @@
+error[E0002]: full-width characters `１；` are not allowed
+ --> a.nihon:2:12
+  |
+2 |     束縛 x = １；
+  |              ^^^^ full-width characters (zenkaku)
+  |
+help: use the ASCII equivalents
+  |
+2 |     束縛 x = 1;
+  |              ~~
+
+error[E0003]: identifier `もしx` starts with keyword `もし`
+ --> a.nihon:3:5
+  |
+3 |     もしx > 1 { 表示!("a"); }
+  |     ^^^^ keyword `もし` (moshi, "if")
+  |
+help: keywords must be separated from identifiers by a space
+  |
+3 |     もし x > 1 { 表示!("a"); }
+  |         +
+
+warning[W0001]: keyword `kansuu` is written in latin letters
+ --> a.nihon:4:5
+  |
+4 |     kansuu y() {}
+  |     ^^^^^^ latin spelling of `関数` ("function")
+  |
+  = note: pass `--romaji` to allow latin keywords
+help: use the canonical form
+  |
+4 |     関数 y() {}
+  |     ~~~~
+
+warning[W0005]: half-width katakana in identifier `ﾊﾝｶｸ`
+ --> a.nihon:5:12
+  |
+5 |     束縛 s = ﾊﾝｶｸ;
+  |              ^^^^ half-width katakana (hankaku)
+  |
+help: use full-width katakana
+  |
+5 |     束縛 s = ハンカク;
+  |              ~~~~~~~~
+
+error: aborting due to 2 previous errors; 2 warnings emitted

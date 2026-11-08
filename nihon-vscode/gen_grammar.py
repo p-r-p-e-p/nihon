@@ -20,8 +20,8 @@ consts = [("真","shin"),("偽","gi")]
 selfs = [("自分","jibun"),("自身","jishin")]
 macros = [("表示","hyouji"),("出力","shutsuryoku"),("異常終了","ijoushuuryou"),
           ("表明","hyoumei"),("整形","seikei"),("未実装","mijissou")]
-types = ["整32","非負32","実64","真偽","文字列","文字","任意","結果"]
-variants = ["有","無","成功","失敗"]
+# (jp, romaji) — tabela TYPES do codegen_c.rs
+types = [("整32","sei32"),("非負32","hifu32"),("実64","jitsu64"),("真偽","shingi"),("文字","moji")]
 
 flat = lambda pairs: [w for p in pairs for w in p]
 
@@ -71,8 +71,7 @@ grammar = {
     kw(flat(consts), "constant.language.boolean.nihon"),
     kw(flat(selfs), "variable.language.self.nihon")]},
   "types": {"patterns": [
-    kw(types, "support.type.primitive.nihon"),
-    kw(variants, "support.constant.variant.nihon")]},
+    kw(flat(types), "support.type.primitive.nihon")]},
   "calls": {"match": f"{B}({ID})(?=\\s*\\()", "captures": {"1": {"name": "entity.name.function.call.nihon"}}},
   "operators": {"name": "keyword.operator.nihon",
                 "match": "->|=>|==|!=|<=|>=|&&|\\|\\||::|\\.\\.=?|[+\\-*/%]=|[+\\-*/%=<>!&|]"}
