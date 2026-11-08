@@ -51,20 +51,4 @@ help: a macro with a similar name exists
 7 |     表示!("x");
   |     ~~~~
 
-error[E0999]: `整形!` is not supported yet
- --> e0501_macros.nihon:8:5
-  |
-8 |     整形!("x");
-  |     ^^^^^^^^^^ needs the text type
-  |
-  = note: `整形!` (seikei!, "format!") builds a `文字列` (mojiretsu, "string"), which arrives in stage 1
-
-error[E0999]: text values are not supported yet
- --> e0501_macros.nihon:9:12
-  |
-9 |     束縛 s = "texto";
-  |              ^^^^^^^ text can only be used as the format string of `表示!` for now
-  |
-  = note: the text type `文字列` (mojiretsu, "string") arrives in stage 1 of the compiler
-
-error: aborting due to 8 previous errors
+error: aborting due to 6 previous errors

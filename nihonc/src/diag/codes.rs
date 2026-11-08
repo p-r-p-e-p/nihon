@@ -90,6 +90,12 @@ pub const E0504: &str = "E0504";
 /// Some conforme as proximas fatias entram.
 pub const E0999: &str = "E0999";
 
+// ---- Metodos e texto (E06xx) ----
+/// Metodo nao encontrado.
+pub const E0613: &str = "E0613";
+/// Soma de numero com texto.
+pub const E0617: &str = "E0617";
+
 // ---- Avisos ----
 /// Palavra-chave escrita em letras latinas (romaji).
 pub const W0001: &str = "W0001";

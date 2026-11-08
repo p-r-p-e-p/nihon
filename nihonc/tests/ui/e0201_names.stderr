@@ -35,7 +35,7 @@ error[E0201]: cannot find type `整3` in this scope
 13 |     束縛 x: 整3 = 1;
    |             ^^^ not found in this scope
    |
-   = note: available types: `整32` (sei32), `非負32` (hifu32), `実64` (jitsu64), `真偽` (shingi), `文字` (moji)
+   = note: available types: `整32` (sei32), `非負32` (hifu32), `実64` (jitsu64), `真偽` (shingi), `文字` (moji), `文字列` (mojiretsu)
 help: a type with a similar name exists
    |
 13 |     束縛 x: 整32 = 1;

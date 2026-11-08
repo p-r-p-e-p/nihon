@@ -1,64 +1,102 @@
 # nihonc
 
-The **Nihon** (`.nihon`) language compiler. Status: stage 0, slice 2 (lexer, parser, initial checks, and C code generator). No external dependencies.
+The compiler for **Nihon** (`.nihon`), a Rust-style language written in Japanese.
+
+Status: stage 0 plus the first part of stage 1 (lexer, parser, checks, C code generator, and the text type `文字列`). No external dependencies.
+
+## How it works
+
+`nihonc` checks your program, turns it into C, and calls the C compiler of your system to build a native executable. There is no virtual machine. Error messages are in English, in the style of `rustc`, with a suggested fix whenever possible.
+
+## Example
+
+`//` marks the romaji reading and the meaning, for readers who do not know Japanese:
+
+```nihon
+関数 主() {                      // kansuu shu() = function main()
+    表示!("こんにちは世界");     // hyouji!("konnichiwa sekai") = println!("hello, world")
+}
+```
 
 ## Build and test
 
-From the repository root, run:
+From the repository root:
 
 ```bash
 cargo build --manifest-path nihonc/Cargo.toml --release
 cargo test --manifest-path nihonc/Cargo.toml
 ```
 
-Or, from this directory (`nihonc/`):
+Or from this directory (`nihonc/`):
 
 ```bash
 cargo build --release
-cargo test                      # unit, diagnostic, and end-to-end tests
+cargo test        # unit, diagnostic, JSON and end-to-end tests
 ```
 
-To run the compiler without relying on a fixed binary path, use `cargo run` from the repository root:
+The end-to-end tests need a C compiler (`cc`, `gcc` or `clang`). Without one they are skipped, not failed.
+
+## Usage
 
 ```bash
-cargo run --manifest-path nihonc/Cargo.toml -- file.nihon
+nihonc file.nihon                    # builds the executable next to the source file
+nihonc -o out file.nihon             # builds the executable at `out`
+nihonc --check file.nihon            # checks only, generates nothing
+nihonc --emit-c file.nihon           # prints the generated C
+nihonc --ast file.nihon              # prints the syntax tree
+nihonc --tokens file.nihon           # prints the tokens
+nihonc --romaji file.nihon           # accepts keywords in latin letters without warnings
+nihonc --strict file.nihon           # turns every warning into an error
+nihonc --message-format=json file.nihon   # one JSON diagnostic per line, for editors
+```
+
+Without a built binary, use `cargo run`:
+
+```bash
 cargo run --manifest-path nihonc/Cargo.toml -- --check file.nihon
-cargo run --manifest-path nihonc/Cargo.toml -- --emit-c file.nihon
-cargo run --manifest-path nihonc/Cargo.toml -- --ast file.nihon
-cargo run --manifest-path nihonc/Cargo.toml -- --tokens file.nihon
-cargo run --manifest-path nihonc/Cargo.toml -- --romaji file.nihon
-cargo run --manifest-path nihonc/Cargo.toml -- --strict file.nihon
-cargo run --manifest-path nihonc/Cargo.toml -- -o output file.nihon
 ```
 
-These commands also work after building. To run the binary directly, use `nihonc/target/release/nihonc` from the repository root, or `target/release/nihonc` from the `nihonc/` directory. The binary is created by building the project.
+The binary is `nihonc/target/release/nihonc` from the repository root, or `target/release/nihonc` from this directory.
 
-A C compiler (`cc`, `gcc`, or `clang`) is required to build the generated executable. The `--check`, `--ast`, `--tokens`, and `--emit-c` options do not compile a C executable.
+A C compiler (`cc`, `gcc` or `clang`) is needed to build executables; set the `CC` environment variable to choose another one. `--check`, `--ast`, `--tokens` and `--emit-c` do not need one.
 
-## Example
+Exit codes: `0` success, `1` the program has errors, `2` wrong command line.
 
-(`//` indicates the romaji reading and meaning):
+### JSON diagnostics
 
-```nihon
-関数 主() {                      // kansuu shu() = main function
-    表示!("こんにちは世界");     // hyouji!("konnichiwa sekai") = prints "hello, world"
-}
-```
+`--message-format=json` prints one JSON object per line on stderr, one per diagnostic, with no summary line. It is what the editor plugin reads. Each object has `level`, `code`, `message`, `file`, `spans`, `notes` and `helps`. Positions are 1-based `line` and `col` (counted in characters) plus `byte_start` and `byte_end`. A help may carry an `edit` with a `replacement`; `safe: true` means it can be applied without asking, `safe: false` means it is only a suggestion.
+
+## The language so far
+
+| Feature | Notes |
+|---|---|
+| Functions, constants, `束縛` (sokubaku, `let`), `可変` (kahen, `mut`) | the last expression of a block is its value |
+| `もし` / `他もし` / `他` (moshi / hokamoshi / hoka, `if` / `else if` / `else`) | usable as expressions |
+| `間`, `無限`, `各 i 中 a..b` (aida, mugen, kaku i naka: `while`, `loop`, `for i in a..b`) | `..` and `..=` ranges |
+| `中断`, `続行`, `返却` (chuudan, zokkou, henkyaku: `break`, `continue`, `return`) | |
+| `として` (toshite, `as`) | casts between numbers, `真偽` and `文字` |
+| Macros `表示!` `出力!` `異常終了!` `表明!` `整形!` `未実装!` | `{}` placeholders and `{{` `}}` |
+| Types `整32` `非負32` `実64` `真偽` `文字` `文字列` | see below |
+| Text: `+`, `+=`, `==`, `<`, `.長さ()`, `.バイト数()` | `長さ` (nagasa) counts characters, `バイト数` (baitosuu) counts bytes |
+
+The entry point is a function named `主` (shu, "main") or `shu`. Neither gets a warning.
 
 ## Project structure
 
-- `src/source.rs`: source text, byte spans, and display-column widths (kanji = 2 columns)
+- `src/source.rs`: source text, byte spans, display-column widths (kanji = 2 columns)
 - `src/width_table.rs`: generated by `tools/gen_width.py` (do not edit by hand)
-- `src/diag/`: diagnostics, the code catalog, and diagnostic rendering
+- `src/diag/`: diagnostics, the error code catalog, human and JSON output
 - `src/lexer/`: lexer, character classes, and the Japanese/romaji keyword table
-- `tests/ui/`: one `.nihon` input and expected `.stderr` output per case (`BLESS=1 cargo test --test ui` regenerates expected files)
-- `src/ast.rs`, `src/parser.rs`: syntax tree and parser (recursive descent plus Pratt parsing, with error recovery)
-- `src/codegen_c.rs`: name, type, and mutability checks, plus C code generation
-- `tests/run.rs`: end-to-end tests (compile and run programs, then compare output; requires a C compiler)
+- `src/ast.rs`, `src/parser.rs`: syntax tree and parser (recursive descent plus Pratt, with error recovery)
+- `src/codegen_c.rs`: name, type and mutability checks, constant evaluation, and C code generation
+- `tests/ui/`: one `.nihon` input and its expected `.stderr` per case (`BLESS=1 cargo test --test ui` rewrites the expected files)
+- `tests/run.rs`: end-to-end tests (compile, run, compare the output)
+- `tests/json.rs`: tests for `--message-format=json`
 
-## Known stage 0 limitations
+## Known limitations
 
-- The only supported types are `整32`, `非負32`, `実64`, `真偽`, and `文字`. Text (`文字列`) is only accepted as the first argument to `表示!`.
-- Integer overflow and division by zero at runtime can cause a panic; the documented exit code is 101.
-- Constants are evaluated at compile time (numbers, `真偽`, `文字`, other constants, operators, `として`, and `もし`/`他`); overflow or division by zero produces error E0208.
-- `真偽` values are printed as `真 (shin)` / `偽 (gi)`.
+- Integer overflow and division by zero stop the program with exit code 101, like Rust in debug mode.
+- Constants are computed while compiling (numbers, `真偽`, `文字`, `文字列`, other constants, operators, `として`, `もし` / `他`). A calculation that overflows or divides by zero is error E0208. Function calls and macros are not allowed in constants.
+- `真偽` values print as `真 (shin)` / `偽 (gi)`.
+- Text built while the program runs (with `整形!` or `+`) is never freed, because there is no owned text type yet.
+- Not supported yet: `構造体`, `列挙型`, `照合`, `任意`, `結果`, arrays and tuples. They are reserved words, and using them gives a clear error.

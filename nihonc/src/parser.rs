@@ -783,6 +783,32 @@ impl<'a, 'h> Parser<'a, 'h> {
                         span,
                     };
                 }
+                T::Dot if BP_CALL >= min_bp => {
+                    self.bump();
+                    let name = self.expect_ident("a method name")?;
+                    if *self.kind() != T::LParen {
+                        let t = self.tok();
+                        let d = Diagnostic::error(
+                            E0110,
+                            format!("expected `(` after the method name, found {}", self.describe(t)),
+                        )
+                        .primary(t.span, "expected `(`")
+                        .note("fields (`valor.campo`) arrive together with `構造体` (kouzoutai, \"struct\"); for now only method calls like `texto.長さ()` exist");
+                        self.emit(d);
+                        return Err(());
+                    }
+                    self.bump();
+                    let args = self.parse_args()?;
+                    let span = Span::new(lhs.span.start, self.prev_end());
+                    lhs = Expr {
+                        kind: ExprKind::MethodCall {
+                            recv: Box::new(lhs),
+                            name,
+                            args,
+                        },
+                        span,
+                    };
+                }
                 T::Keyword(Kw::As) if BP_CAST >= min_bp => {
                     self.bump();
                     let ty = self.parse_type()?;
@@ -967,6 +993,10 @@ mod tests {
                 let a: Vec<String> = args.iter().map(s).collect();
                 format!("(call {} {})", s(callee), a.join(" "))
             }
+            ExprKind::MethodCall { recv, name, args } => {
+                let a: Vec<String> = args.iter().map(s).collect();
+                format!("(method {} {} {})", s(recv), name.name, a.join(" "))
+            }
             ExprKind::MacroCall { name, args, .. } => {
                 let a: Vec<String> = args.iter().map(s).collect();
                 format!("(macro {} {})", name, a.join(" "))
@@ -1019,6 +1049,20 @@ mod tests {
         assert_eq!(expr_of("f(1, g(2),)"), "(call f 1 (call g 2))");
         assert_eq!(expr_of("1..=n + 1"), "(..= 1 (Add n 1))");
         assert_eq!(expr_of("表示!(\"a\", 1)"), "(macro 表示 \"a\" 1)");
+        assert_eq!(expr_of("a.長さ() + 1"), "(Add (method a 長さ ) 1)");
+        assert_eq!(expr_of("\"x\".長さ().f(2)"), "(method (method \"x\" 長さ ) f 2)");
+    }
+
+    #[test]
+    fn method_calls() {
+        assert_eq!(expr_of("a.長さ()"), "(method a 長さ )");
+        assert_eq!(expr_of("a.f(1).g(2, 3)"), "(method (method a f 1) g 2 3)");
+        assert_eq!(expr_of("-a.f() + 1"), "(Add (neg (method a f )) 1)");
+        let file = SourceFile::new("t.nihon", "関数 f() { a.x; }".to_string());
+        let mut h = Handler::new(Config::default());
+        let toks = lex(&file, &mut h);
+        assert!(parse(&file, &toks, &mut h).is_none());
+        assert_eq!(codes(&h.diags), vec!["E0110"]);
     }
 
     #[test]

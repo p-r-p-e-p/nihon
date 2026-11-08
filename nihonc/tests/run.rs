@@ -219,3 +219,68 @@ fn constants_are_folded_at_compile_time() {
 "#;
     ok("constfold", src, "14 3.5 -14 4000000001 -2147483648\n");
 }
+
+#[test]
+fn executable_goes_next_to_the_source_by_default() {
+    if !has_cc() {
+        return;
+    }
+    let dir = workdir("nextto");
+    let file = dir.join("oi.nihon");
+    std::fs::write(&file, "関数 主() { 表示!(\"oi\"); }").unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_nihonc")).arg(&file).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let exe = dir.join(if cfg!(windows) { "oi.exe" } else { "oi" });
+    assert!(exe.exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn text_values_and_methods() {
+    let src = r#"
+定数 NOME: 文字列 = "世界" + "!";
+関数 saudar(quem: 文字列) -> 文字列 {
+    整形!("こんにちは, {}", quem)
+}
+関数 主() {
+    束縛 可変 s: 文字列 = "あい";
+    s += "う";
+    表示!("{} {} {}", s, s.長さ(), s.バイト数());
+    表示!("{}", saudar(NOME));
+    束縛 t = もし s == "あいう" { "igual" } 他 { "diferente" };
+    表示!("{} {} {}", t, "a" < "b", "abc" > "abd");
+    束縛 vazio = "";
+    表示!("[{}] {}", vazio, vazio.長さ());
+    束縛 n = 3;
+    束縛 f = 整形!("{}-{}-{}-{}", n, 1.5, 'x', 真偽_ok());
+    表示!("{} {}", f, f.nagasa());
+    表示!("a\tb\"c\\d");
+}
+関数 真偽_ok() -> 真偽 { 真 }
+"#;
+    ok(
+        "text",
+        src,
+        "あいう 3 9\nこんにちは, 世界!\nigual 真 (shin) 偽 (gi)\n[] 0\n3-1.5-x-真 (shin) 16\na\tb\"c\\d\n",
+    );
+}
+
+#[test]
+fn format_can_be_used_in_a_loop_and_in_panics() {
+    ok(
+        "fmtloop",
+        r#"
+関数 主() {
+    束縛 可変 acc = "";
+    各 i 中 0..5 { acc += 整形!("{},", i); }
+    表示!("{}", acc);
+}
+"#,
+        "0,1,2,3,4,\n",
+    );
+    fails(
+        "panictext",
+        r#"関数 主() { 束縛 m = 整形!("x{}", 7); 異常終了!("{} deu ruim", m); }"#,
+        "x7 deu ruim",
+    );
+}

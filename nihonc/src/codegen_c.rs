@@ -27,6 +27,7 @@ enum Ty {
     F64,
     Bool,
     Char,
+    Str,
     Unit,
     /// Expressao que nunca termina (`返却`, `異常終了!`...). Serve para qualquer tipo.
     Never,
@@ -47,6 +48,7 @@ const TYPES: &[TyInfo] = &[
     TyInfo { ty: Ty::F64, jp: "実64", romaji: "jitsu64", meaning: "64-bit floating point" },
     TyInfo { ty: Ty::Bool, jp: "真偽", romaji: "shingi", meaning: "boolean" },
     TyInfo { ty: Ty::Char, jp: "文字", romaji: "moji", meaning: "character" },
+    TyInfo { ty: Ty::Str, jp: "文字列", romaji: "mojiretsu", meaning: "text (UTF-8, immutable)" },
 ];
 
 impl Ty {
@@ -56,6 +58,7 @@ impl Ty {
             Ty::U32 | Ty::Char => "uint32_t",
             Ty::F64 => "double",
             Ty::Bool => "int",
+            Ty::Str => "nh_str",
             Ty::Unit | Ty::Never | Ty::Err => "void",
         }
     }
@@ -152,8 +155,9 @@ enum MacroKind {
 }
 
 /// Valor de uma constante, calculado na compilacao.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 enum CV {
+    S(String),
     I(i32),
     U(u32),
     F(f64),
@@ -162,8 +166,9 @@ enum CV {
 }
 
 impl CV {
-    fn ty(self) -> Ty {
+    fn ty(&self) -> Ty {
         match self {
+            CV::S(_) => Ty::Str,
             CV::I(_) => Ty::I32,
             CV::U(_) => Ty::U32,
             CV::F(_) => Ty::F64,
@@ -172,18 +177,19 @@ impl CV {
         }
     }
 
-    fn to_c(self) -> String {
+    fn to_c(&self) -> String {
         match self {
-            CV::I(v) if v == i32::MIN => "(-2147483647-1)".to_string(),
-            CV::I(v) if v < 0 => format!("({})", v),
+            CV::S(t) => format!("((nh_str){{\"{}\", {}}})", c_escape(t), t.len()),
+            CV::I(v) if *v == i32::MIN => "(-2147483647-1)".to_string(),
+            CV::I(v) if *v < 0 => format!("({})", v),
             CV::I(v) => v.to_string(),
             CV::U(v) => format!("{}u", v),
             CV::F(v) if v.is_nan() => "NAN".to_string(),
-            CV::F(v) if v == f64::INFINITY => "INFINITY".to_string(),
-            CV::F(v) if v == f64::NEG_INFINITY => "(-INFINITY)".to_string(),
+            CV::F(v) if *v == f64::INFINITY => "INFINITY".to_string(),
+            CV::F(v) if *v == f64::NEG_INFINITY => "(-INFINITY)".to_string(),
             CV::F(v) => format!("({:?})", v),
-            CV::B(v) => if v { "1" } else { "0" }.to_string(),
-            CV::C(c) => format!("((uint32_t){})", c as u32),
+            CV::B(v) => if *v { "1" } else { "0" }.to_string(),
+            CV::C(c) => format!("((uint32_t){})", *c as u32),
         }
     }
 }
@@ -724,11 +730,11 @@ impl<'a, 'h> Cg<'a, 'h> {
         memo: &mut HashMap<String, CV>,
     ) -> Option<CV> {
         if let Some(v) = memo.get(name) {
-            return Some(*v);
+            return Some(v.clone());
         }
         let c = *asts.get(name)?;
         let v = self.eval(&c.value, asts, memo)?;
-        memo.insert(name.to_string(), v);
+        memo.insert(name.to_string(), v.clone());
         Some(v)
     }
 
@@ -757,6 +763,7 @@ impl<'a, 'h> Cg<'a, 'h> {
             }
             ExprKind::Bool(b) => Some(CV::B(*b)),
             ExprKind::Char(c) => Some(CV::C(*c)),
+            ExprKind::Str(t) => Some(CV::S(t.clone())),
             ExprKind::Paren(x) => self.eval(x, asts, memo),
             ExprKind::Path(id) => self.eval_const(&id.name, asts, memo),
             ExprKind::Unary { op, expr } => {
@@ -790,22 +797,22 @@ impl<'a, 'h> Cg<'a, 'h> {
             ExprKind::Cast { expr, ty } => {
                 let v = self.eval(expr, asts, memo)?;
                 let target = TYPES.iter().find(|i| i.jp == ty.name || i.romaji == ty.name)?.ty;
-                let as_i64 = |v: CV| -> Option<i64> {
+                let as_i64 = |v: &CV| -> Option<i64> {
                     Some(match v {
-                        CV::I(a) => a as i64,
-                        CV::U(a) => a as i64,
-                        CV::B(a) => a as i64,
-                        CV::C(a) => a as i64,
-                        CV::F(_) => return None,
+                        CV::I(a) => *a as i64,
+                        CV::U(a) => *a as i64,
+                        CV::B(a) => *a as i64,
+                        CV::C(a) => *a as i64,
+                        CV::F(_) | CV::S(_) => return None,
                     })
                 };
                 Some(match (v, target) {
                     (CV::F(a), Ty::I32) => CV::I(a as i32),
                     (CV::F(a), Ty::U32) => CV::U(a as u32),
                     (CV::F(a), Ty::F64) => CV::F(a),
-                    (v, Ty::F64) => CV::F(as_i64(v)? as f64),
-                    (v, Ty::I32) => CV::I(as_i64(v)? as i32),
-                    (v, Ty::U32) => CV::U(as_i64(v)? as u32),
+                    (v, Ty::F64) => CV::F(as_i64(&v)? as f64),
+                    (v, Ty::I32) => CV::I(as_i64(&v)? as i32),
+                    (v, Ty::U32) => CV::U(as_i64(&v)? as u32),
                     (v, t) if v.ty() == t => v,
                     _ => return None,
                 })
@@ -913,6 +920,16 @@ impl<'a, 'h> Cg<'a, 'h> {
                 Or => Some(CV::B(a || b)),
                 Eq => Some(CV::B(a == b)),
                 Ne => Some(CV::B(a != b)),
+                _ => None,
+            },
+            (CV::S(a), CV::S(b)) => match op {
+                Add => Some(CV::S(format!("{}{}", a, b))),
+                Eq => Some(CV::B(a == b)),
+                Ne => Some(CV::B(a != b)),
+                Lt => Some(CV::B(a < b)),
+                Gt => Some(CV::B(a > b)),
+                Le => Some(CV::B(a <= b)),
+                Ge => Some(CV::B(a >= b)),
                 _ => None,
             },
             (CV::C(a), CV::C(b)) => match op {
@@ -1386,16 +1403,11 @@ impl<'a, 'h> Cg<'a, 'h> {
                 ty: Ty::Char,
                 span,
             },
-            ExprKind::Str(_) => {
-                let d = Diagnostic::error(
-                    E0999,
-                    "text values are not supported yet",
-                )
-                .primary(span, "text can only be used as the format string of `表示!` for now")
-                .note("the text type `文字列` (mojiretsu, \"string\") arrives in stage 1 of the compiler");
-                self.emit(d);
-                self.err_val(span)
-            }
+            ExprKind::Str(t) => Val {
+                c: format!("((nh_str){{\"{}\", {}}})", c_escape(t), t.len()),
+                ty: Ty::Str,
+                span,
+            },
             ExprKind::Paren(inner) => {
                 let mut v = self.gen_expr(inner, expect);
                 v.span = span;
@@ -1413,6 +1425,7 @@ impl<'a, 'h> Cg<'a, 'h> {
                 self.err_val(span)
             }
             ExprKind::Call { callee, args } => self.gen_call(callee, args, span),
+            ExprKind::MethodCall { recv, name, args } => self.gen_method(recv, name, args, span),
             ExprKind::MacroCall {
                 name,
                 name_span,
@@ -1630,6 +1643,16 @@ impl<'a, 'h> Cg<'a, 'h> {
     fn bad_binary(&mut self, op: BinOp, l: &Val, r: &Val, span: Span) {
         let o = Self::op_str(op);
         let _ = span;
+        if op == BinOp::Add && (l.ty == Ty::Str) != (r.ty == Ty::Str) && (l.ty.is_num() || r.ty.is_num()) {
+            let (text, num) = if l.ty == Ty::Str { (&l, &r) } else { (&r, &l) };
+            let d = Diagnostic::error(E0617, "cannot add a number to text")
+                .secondary(text.span, "text (`文字列`, mojiretsu)")
+                .secondary(num.span, format!("number ({})", bt(num.ty)))
+                .primary(span, "`+` joins two texts, not a text and a number")
+                .help("build the text with `整形!` (seikei!, \"format!\"), for example `整形!(\"{}{}\", a, b)`");
+            self.emit(d);
+            return;
+        }
         let (gs, ge) = (l.span.end.min(r.span.start), r.span.start.max(l.span.end));
         let between = &self.file.text[gs..ge];
         let lead = between.len() - between.trim_start().len();
@@ -1670,6 +1693,11 @@ impl<'a, 'h> Cg<'a, 'h> {
                 ty: Ty::Never,
                 span,
             });
+        }
+        if op == BinOp::Add && l.ty == Ty::Str && r.ty == Ty::Str {
+            let t = self.tmp();
+            self.line(format!("nh_str {} = nh_str_concat({}, {});", t, l.c, r.c));
+            return Some(Val { c: t, ty: Ty::Str, span });
         }
         if l.ty != r.ty || !l.ty.is_num() {
             self.bad_binary(op, &l, &r, span);
@@ -1722,6 +1750,13 @@ impl<'a, 'h> Cg<'a, 'h> {
         if !ok {
             self.bad_binary(op, &l, &r, span);
             return self.err_val(span);
+        }
+        if l.ty == Ty::Str {
+            return Val {
+                c: format!("(nh_str_cmp({}, {}) {} 0)", l.c, r.c, Self::op_str(op)),
+                ty: Ty::Bool,
+                span,
+            };
         }
         Val {
             c: format!("({} {} {})", l.c, Self::op_str(op), r.c),
@@ -1895,6 +1930,82 @@ impl<'a, 'h> Cg<'a, 'h> {
         }
     }
 
+    // ---------------------------------------------------------------- metodos
+
+    fn gen_method(&mut self, recv: &Expr, name: &Ident, args: &[Expr], span: Span) -> Val {
+        const METHODS: &[(&str, &str, &str, &str)] = &[
+            ("長さ", "nagasa", "length in characters", "nh_str_chars"),
+            ("バイト数", "baitosuu", "length in bytes", "nh_str_bytes"),
+        ];
+        let r = self.gen_expr(recv, None);
+        for a in args {
+            let _ = self.gen_expr(a, None);
+        }
+        if r.ty == Ty::Err || r.ty == Ty::Never {
+            return self.err_val(span);
+        }
+        let list: Vec<String> = METHODS
+            .iter()
+            .map(|m| format!("`{}` ({}, \"{}\")", m.0, m.1, m.2))
+            .collect();
+        if r.ty != Ty::Str {
+            let d = Diagnostic::error(
+                E0613,
+                format!("no method named `{}` found for type {}", name.name, bt(r.ty)),
+            )
+            .primary(name.span, "method not found")
+            .note(format!("only `文字列` (mojiretsu, \"text\") has methods for now: {}", list.join(", ")));
+            self.emit(d);
+            return self.err_val(span);
+        }
+        let Some(m) = METHODS.iter().find(|m| m.0 == name.name || m.1 == name.name) else {
+            let mut d = Diagnostic::error(
+                E0613,
+                format!("no method named `{}` found for type {}", name.name, bt(Ty::Str)),
+            )
+            .primary(name.span, "method not found");
+            let cands = METHODS.iter().flat_map(|m| [m.0, m.1]);
+            if let Some(sg) = similar(&name.name, cands) {
+                let sg = METHODS.iter().find(|m| m.1 == sg).map(|m| m.0.to_string()).unwrap_or(sg);
+                d = d.suggest("a method with a similar name exists", name.span, sg, false);
+            }
+            d = d.note(format!("available methods: {}", list.join(", ")));
+            self.emit(d);
+            return self.err_val(span);
+        };
+        if name.name == m.1 && !self.handler.config.romaji {
+            let d = Diagnostic::warning(
+                W0001,
+                format!("method name `{}` is written in latin letters", name.name),
+            )
+            .primary(name.span, format!("latin spelling of `{}` (\"{}\")", m.0, m.2))
+            .note("pass `--romaji` to allow latin keywords")
+            .suggest("use the canonical form", name.span, m.0, true);
+            self.emit(d);
+        }
+        if !args.is_empty() {
+            let d = Diagnostic::error(
+                E0302,
+                format!(
+                    "this method takes 0 arguments but {} {} supplied",
+                    plural(args.len(), "argument", "arguments"),
+                    if args.len() == 1 { "was" } else { "were" }
+                ),
+            )
+            .primary(name.span, "expected 0 arguments");
+            self.emit(d);
+            return self.err_val(span);
+        }
+        let t = self.tmp();
+        let loc = self.loc(span);
+        self.line(format!("int32_t {} = nh_len_i32({}({}), \"{}\");", t, m.3, r.c, loc));
+        Val {
+            c: t,
+            ty: Ty::I32,
+            span,
+        }
+    }
+
     // ----------------------------------------------------------------- macros
 
     fn gen_macro(&mut self, name: &str, name_span: Span, args: &[Expr], span: Span) -> Val {
@@ -1928,14 +2039,6 @@ impl<'a, 'h> Cg<'a, 'h> {
             "整形" => MacroKind::Format,
             _ => MacroKind::Todo,
         };
-        if kind == MacroKind::Format {
-            let d = Diagnostic::error(E0999, "`整形!` is not supported yet")
-                .primary(span, "needs the text type")
-                .note("`整形!` (seikei!, \"format!\") builds a `文字列` (mojiretsu, \"string\"), which arrives in stage 1");
-            self.emit(d);
-            return self.err_val(span);
-        }
-
         // 表明! confere a condicao primeiro
         let mut rest = args;
         let mut cond: Option<Val> = None;
@@ -2031,11 +2134,14 @@ impl<'a, 'h> Cg<'a, 'h> {
         }
 
         // escrita
+        let fmt_buf = if kind == MacroKind::Format { Some(self.tmp()) } else { None };
         let (sink, newline) = match kind {
-            MacroKind::Println => ("stdout", true),
-            MacroKind::Print => ("stdout", false),
-            _ => ("stderr", false),
+            MacroKind::Println => ("&nh_o_out".to_string(), true),
+            MacroKind::Print => ("&nh_o_out".to_string(), false),
+            MacroKind::Format => (format!("&{}", fmt_buf.as_ref().unwrap()), false),
+            _ => ("&nh_o_err".to_string(), false),
         };
+        let sink = sink.as_str();
         let mut code = String::new();
         let mut pending = String::new();
         let mut vi = 0;
@@ -2072,6 +2178,7 @@ impl<'a, 'h> Cg<'a, 'h> {
                         Ty::F64 => "f64",
                         Ty::Bool => "bool",
                         Ty::Char => "char",
+                        Ty::Str => "str",
                         _ => continue,
                     };
                     ops.push(format!("nh_w_{}({}, {});", f, sink, v.c));
@@ -2089,6 +2196,18 @@ impl<'a, 'h> Cg<'a, 'h> {
 
         let loc = self.loc(span);
         match kind {
+            MacroKind::Format => {
+                let b = fmt_buf.unwrap();
+                let t = self.tmp();
+                self.line(format!("nh_out {} = nh_out_buf();", b));
+                self.buf.push_str(&code);
+                self.line(format!("nh_str {} = nh_out_take(&{});", t, b));
+                Val {
+                    c: t,
+                    ty: Ty::Str,
+                    span,
+                }
+            }
             MacroKind::Println | MacroKind::Print => {
                 self.buf.push_str(&code);
                 self.unit(span)
@@ -2311,12 +2430,18 @@ const RUNTIME: &str = r#"#include <stdint.h>
 #define NH_NORETURN
 #endif
 
+typedef struct { const char *p; size_t n; } nh_str;
+typedef struct { FILE *f; char *buf; size_t len, cap; } nh_out;
+static nh_out nh_o_out, nh_o_err;
+
 static void nh_setup(void) {
 #ifdef _WIN32
 SetConsoleOutputCP(65001);
 _setmode(_fileno(stdout), _O_BINARY);
 _setmode(_fileno(stderr), _O_BINARY);
 #endif
+nh_o_out.f = stdout;
+nh_o_err.f = stderr;
 }
 
 static void nh_panic_begin(const char *loc) {
@@ -2367,27 +2492,57 @@ if (x >= 4294967295.0) return UINT32_MAX;
 return (uint32_t)x;
 }
 
-static void nh_w_lit(FILE *f, const char *s, size_t n) { fwrite(s, 1, n, f); }
-static void nh_w_i32(FILE *f, int32_t v) { fprintf(f, "%" PRId32, v); }
-static void nh_w_u32(FILE *f, uint32_t v) { fprintf(f, "%" PRIu32, v); }
-static void nh_w_bool(FILE *f, int v) { fputs(v ? "\xe7\x9c\x9f (shin)" : "\xe5\x81\xbd (gi)", f); }
-static void nh_w_char(FILE *f, uint32_t c) {
-unsigned char b[4];
+/* ---- output: a file (stdout, stderr) or a growing buffer (for the text of format) ---- */
+static void nh_oom(void) {
+fputs("error: out of memory\n", stderr);
+exit(101);
+}
+static void nh_put(nh_out *o, const char *s, size_t n) {
+if (o->f) { fwrite(s, 1, n, o->f); return; }
+if (o->len + n > o->cap) {
+size_t cap = o->cap ? o->cap : 32;
+while (cap < o->len + n) cap *= 2;
+o->buf = (char *)realloc(o->buf, cap);
+if (!o->buf) nh_oom();
+o->cap = cap;
+}
+if (n) memcpy(o->buf + o->len, s, n);
+o->len += n;
+}
+static nh_out nh_out_buf(void) { nh_out o; o.f = NULL; o.buf = NULL; o.len = 0; o.cap = 0; return o; }
+/* the buffer is handed over to the text and never freed (no ownership until stage 4) */
+static nh_str nh_out_take(nh_out *o) {
+nh_str s;
+s.p = o->buf ? o->buf : "";
+s.n = o->len;
+return s;
+}
+
+static void nh_w_lit(nh_out *o, const char *s, size_t n) { nh_put(o, s, n); }
+static void nh_w_str(nh_out *o, nh_str s) { nh_put(o, s.p, s.n); }
+static void nh_w_i32(nh_out *o, int32_t v) { char b[16]; int n = snprintf(b, sizeof b, "%" PRId32, v); nh_put(o, b, (size_t)n); }
+static void nh_w_u32(nh_out *o, uint32_t v) { char b[16]; int n = snprintf(b, sizeof b, "%" PRIu32, v); nh_put(o, b, (size_t)n); }
+static void nh_w_bool(nh_out *o, int v) {
+if (v) nh_put(o, "\xe7\x9c\x9f (shin)", 10); else nh_put(o, "\xe5\x81\xbd (gi)", 8);
+}
+static void nh_w_char(nh_out *o, uint32_t c) {
+char b[4];
 size_t n;
-if (c < 0x80) { b[0] = (unsigned char)c; n = 1; }
-else if (c < 0x800) { b[0] = (unsigned char)(0xC0 | (c >> 6)); b[1] = (unsigned char)(0x80 | (c & 0x3F)); n = 2; }
-else if (c < 0x10000) { b[0] = (unsigned char)(0xE0 | (c >> 12)); b[1] = (unsigned char)(0x80 | ((c >> 6) & 0x3F)); b[2] = (unsigned char)(0x80 | (c & 0x3F)); n = 3; }
-else { b[0] = (unsigned char)(0xF0 | (c >> 18)); b[1] = (unsigned char)(0x80 | ((c >> 12) & 0x3F)); b[2] = (unsigned char)(0x80 | ((c >> 6) & 0x3F)); b[3] = (unsigned char)(0x80 | (c & 0x3F)); n = 4; }
-fwrite(b, 1, n, f);
+if (c < 0x80) { b[0] = (char)c; n = 1; }
+else if (c < 0x800) { b[0] = (char)(0xC0 | (c >> 6)); b[1] = (char)(0x80 | (c & 0x3F)); n = 2; }
+else if (c < 0x10000) { b[0] = (char)(0xE0 | (c >> 12)); b[1] = (char)(0x80 | ((c >> 6) & 0x3F)); b[2] = (char)(0x80 | (c & 0x3F)); n = 3; }
+else { b[0] = (char)(0xF0 | (c >> 18)); b[1] = (char)(0x80 | ((c >> 12) & 0x3F)); b[2] = (char)(0x80 | ((c >> 6) & 0x3F)); b[3] = (char)(0x80 | (c & 0x3F)); n = 4; }
+nh_put(o, b, n);
 }
 /* shortest text that reads back as the same number, never in scientific notation (like Rust) */
-static void nh_w_f64(FILE *f, double v) {
-char buf[48], digits[32];
+static void nh_w_f64(nh_out *o, double v) {
+char buf[48], digits[32], out[400];
 int p, n = 0, i, neg = 0, e10, pos;
+size_t k = 0;
 char *s;
-if (v != v) { fputs("NaN", f); return; }
-if (v == INFINITY) { fputs("inf", f); return; }
-if (v == -INFINITY) { fputs("-inf", f); return; }
+if (v != v) { nh_put(o, "NaN", 3); return; }
+if (v == INFINITY) { nh_put(o, "inf", 3); return; }
+if (v == -INFINITY) { nh_put(o, "-inf", 4); return; }
 for (p = 0; p < 17; p++) {
 snprintf(buf, sizeof buf, "%.*e", p, v);
 if (strtod(buf, NULL) == v) break;
@@ -2397,20 +2552,50 @@ if (*s == '-') { neg = 1; s++; }
 while (*s && *s != 'e') { if (*s != '.') digits[n++] = *s; s++; }
 e10 = atoi(s + 1);
 while (n > 1 && digits[n - 1] == '0') n--;
-if (neg) fputc('-', f);
-if (digits[0] == '0') { fputc('0', f); return; }
+if (neg) out[k++] = '-';
+if (digits[0] == '0') { out[k++] = '0'; nh_put(o, out, k); return; }
 pos = e10 + 1;
 if (pos <= 0) {
-fputs("0.", f);
-for (i = 0; i < -pos; i++) fputc('0', f);
-fwrite(digits, 1, (size_t)n, f);
+out[k++] = '0'; out[k++] = '.';
+for (i = 0; i < -pos; i++) out[k++] = '0';
+memcpy(out + k, digits, (size_t)n); k += (size_t)n;
 } else if (pos >= n) {
-fwrite(digits, 1, (size_t)n, f);
-for (i = 0; i < pos - n; i++) fputc('0', f);
+memcpy(out + k, digits, (size_t)n); k += (size_t)n;
+for (i = 0; i < pos - n; i++) out[k++] = '0';
 } else {
-fwrite(digits, 1, (size_t)pos, f);
-fputc('.', f);
-fwrite(digits + pos, 1, (size_t)(n - pos), f);
+memcpy(out + k, digits, (size_t)pos); k += (size_t)pos;
+out[k++] = '.';
+memcpy(out + k, digits + pos, (size_t)(n - pos)); k += (size_t)(n - pos);
 }
+nh_put(o, out, k);
+}
+
+/* ---- text ---- */
+static int nh_str_cmp(nh_str a, nh_str b) {
+size_t m = a.n < b.n ? a.n : b.n;
+int c = m ? memcmp(a.p, b.p, m) : 0;
+if (c) return c < 0 ? -1 : 1;
+return a.n < b.n ? -1 : (a.n > b.n ? 1 : 0);
+}
+static nh_str nh_str_concat(nh_str a, nh_str b) {
+nh_str r;
+char *m = (char *)malloc(a.n + b.n + 1);
+if (!m) nh_oom();
+if (a.n) memcpy(m, a.p, a.n);
+if (b.n) memcpy(m + a.n, b.p, b.n);
+m[a.n + b.n] = 0;
+r.p = m;
+r.n = a.n + b.n;
+return r;
+}
+static size_t nh_str_bytes(nh_str s) { return s.n; }
+static size_t nh_str_chars(nh_str s) {
+size_t i, n = 0;
+for (i = 0; i < s.n; i++) if ((((unsigned char)s.p[i]) & 0xC0) != 0x80) n++;
+return n;
+}
+static int32_t nh_len_i32(size_t n, const char *l) {
+if (n > (size_t)INT32_MAX) nh_panic_msg(l, "the length does not fit in a 32-bit integer");
+return (int32_t)n;
 }
 "#;

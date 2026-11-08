@@ -1,4 +1,4 @@
-//! nihonc: compilador da linguagem Nihon (stage 0, fatia 2: lexer, parser e gerador de C).
+//! nihonc: compilador da linguagem Nihon (stage 0, fatia 1: lexer + erros).
 
 mod ast;
 mod codegen_c;
@@ -39,7 +39,7 @@ OPTIONS:
                    `human` (default) or `json`: one JSON object per line on
                    stderr for each diagnostic, for editors and tools
     --emit-c       print the generated C to stdout instead of building
-    -o <file>      name of the executable (default: the file name without `.nihon`)
+    -o <file>      name of the executable (default: next to the source file, without `.nihon`)
     -h, --help     show this help
     -V, --version  show the version
 ";
@@ -211,14 +211,20 @@ fn build(args: &Args, c_code: &str) -> i32 {
     let exe = match &args.out {
         Some(o) => o.clone(),
         None => {
-            let stem = std::path::Path::new(&args.path)
+            // por padrao, ao lado do codigo fonte
+            let src = std::path::Path::new(&args.path);
+            let stem = src
                 .file_stem()
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_else(|| "a".to_string());
-            if cfg!(windows) {
+            let name = if cfg!(windows) {
                 format!("{}.exe", stem)
             } else {
                 stem
+            };
+            match src.parent() {
+                Some(dir) if !dir.as_os_str().is_empty() => dir.join(name).to_string_lossy().to_string(),
+                _ => name,
             }
         }
     };
