@@ -26,6 +26,7 @@ pub fn parse(file: &SourceFile, tokens: &[Token], handler: &mut Handler) -> Opti
         file,
         tokens,
         pos: 0,
+        no_struct: false,
         handler,
     };
     let program = p.parse_program();
@@ -113,6 +114,8 @@ struct Parser<'a, 'h> {
     file: &'a SourceFile,
     tokens: &'a [Token],
     pos: usize,
+    /// Dentro do cabecalho de `もし`/`間`/`各`, `nome { ... }` nao e um literal de struct.
+    no_struct: bool,
     handler: &'h mut Handler,
 }
 
@@ -328,13 +331,23 @@ impl<'a, 'h> Parser<'a, 'h> {
     }
 
     fn parse_type(&mut self) -> PResult<Type> {
+        let start_tok = self.tok();
+        let mut reference = None;
+        if self.eat(T::Amp) {
+            reference = Some(self.eat(T::Keyword(Kw::Mut)));
+        }
         let t = self.tok();
         match &t.kind {
-            T::Ident(name) => {
+            T::Ident(_) | T::Keyword(Kw::SelfType) => {
+                let name = match &t.kind {
+                    T::Ident(n) => n.clone(),
+                    _ => "自身".to_string(),
+                };
                 self.bump();
                 Ok(Type {
-                    name: name.clone(),
-                    span: t.span,
+                    name,
+                    span: Span::new(start_tok.span.start, t.span.end),
+                    reference,
                 })
             }
             _ => {
@@ -400,7 +413,7 @@ impl<'a, 'h> Parser<'a, 'h> {
         }
         loop {
             match self.kind() {
-                T::Eof | T::Keyword(Kw::Fn | Kw::Const) => return,
+                T::Eof | T::Keyword(Kw::Fn | Kw::Const | Kw::Struct | Kw::Impl | Kw::Pub) => return,
                 T::LBrace | T::LParen | T::LBracket => self.skip_group(),
                 _ => {
                     self.bump();
@@ -424,17 +437,21 @@ impl<'a, 'h> Parser<'a, 'h> {
     }
 
     fn parse_item(&mut self) -> PResult<Item> {
+        // `公開` (koukai, "public") e aceito e ignorado por enquanto.
+        self.eat(T::Keyword(Kw::Pub));
         match self.kind() {
-            T::Keyword(Kw::Fn) => self.parse_fn(),
+            T::Keyword(Kw::Fn) => Ok(Item::Fn(self.parse_fn()?)),
             T::Keyword(Kw::Const) => self.parse_const(),
+            T::Keyword(Kw::Struct) => self.parse_struct(),
+            T::Keyword(Kw::Impl) => self.parse_impl(),
             _ => {
                 let t = self.tok();
                 let d = Diagnostic::error(
                     E0108,
                     format!("expected item, found {}", self.describe(t)),
                 )
-                .primary(t.span, "expected `関数` or `定数`")
-                .note("only functions `関数` (kansuu, \"function\") and constants `定数` (teisuu, \"constant\") may appear at the top level");
+                .primary(t.span, "expected `関数`, `定数`, `構造体` or `実装`")
+                .note("only functions `関数` (kansuu, \"function\"), constants `定数` (teisuu, \"constant\"), structs `構造体` (kouzoutai, \"struct\") and `実装` (jissou, \"implementation\") blocks may appear at the top level");
                 let d = self.with_kw_notes(d, t);
                 self.emit(d);
                 Err(())
@@ -442,11 +459,36 @@ impl<'a, 'h> Parser<'a, 'h> {
         }
     }
 
-    fn parse_fn(&mut self) -> PResult<Item> {
+    /// Tenta ler `自分`, `可変 自分`, `&自分` ou `&可変 自分` como primeiro parametro.
+    fn parse_self_param(&mut self) -> Option<SelfParam> {
+        let start = self.tok().span.start;
+        let (kind, mutable, skip) = match (self.kind(), self.nth_kind(1), self.nth_kind(2)) {
+            (T::Keyword(Kw::SelfValue), _, _) => (SelfKind::Value, false, 1),
+            (T::Keyword(Kw::Mut), T::Keyword(Kw::SelfValue), _) => (SelfKind::Value, true, 2),
+            (T::Amp, T::Keyword(Kw::SelfValue), _) => (SelfKind::Ref, false, 2),
+            (T::Amp, T::Keyword(Kw::Mut), T::Keyword(Kw::SelfValue)) => (SelfKind::RefMut, false, 3),
+            _ => return None,
+        };
+        for _ in 0..skip {
+            self.bump();
+        }
+        Some(SelfParam {
+            kind,
+            mutable,
+            span: Span::new(start, self.prev_end()),
+        })
+    }
+
+    fn parse_fn(&mut self) -> PResult<FnItem> {
         let fn_tok = self.bump();
         let name = self.expect_ident("a function name")?;
         self.expect(T::LParen, "`(`")?;
         let mut params = Vec::new();
+        let self_param = self.parse_self_param();
+        if self_param.is_some() && !self.eat(T::Comma) && *self.kind() != T::RParen {
+            self.err_expected("`,` or `)`");
+            return Err(());
+        }
         while *self.kind() != T::RParen {
             let pname = self.expect_ident("a parameter name")?;
             self.expect(T::Colon, "`:`")?;
@@ -464,12 +506,57 @@ impl<'a, 'h> Parser<'a, 'h> {
         };
         let body = self.parse_block()?;
         let span = Span::new(fn_tok.span.start, body.span.end);
-        Ok(Item::Fn(FnItem {
+        Ok(FnItem {
             name,
+            self_param,
             params,
             ret,
             body,
             span,
+        })
+    }
+
+    fn parse_struct(&mut self) -> PResult<Item> {
+        let kw = self.bump();
+        let name = self.expect_ident("a struct name")?;
+        self.expect(T::LBrace, "`{`")?;
+        let mut fields = Vec::new();
+        while *self.kind() != T::RBrace {
+            self.eat(T::Keyword(Kw::Pub));
+            let fname = self.expect_ident("a field name")?;
+            self.expect(T::Colon, "`:`")?;
+            let ty = self.parse_type()?;
+            fields.push(Field { name: fname, ty });
+            if !self.eat(T::Comma) {
+                break;
+            }
+        }
+        self.expect(T::RBrace, "`,` or `}`")?;
+        Ok(Item::Struct(StructItem {
+            name,
+            fields,
+            span: Span::new(kw.span.start, self.prev_end()),
+        }))
+    }
+
+    fn parse_impl(&mut self) -> PResult<Item> {
+        let kw = self.bump();
+        let ty = self.expect_ident("a struct name")?;
+        self.expect(T::LBrace, "`{`")?;
+        let mut fns = Vec::new();
+        while *self.kind() != T::RBrace {
+            self.eat(T::Keyword(Kw::Pub));
+            if *self.kind() != T::Keyword(Kw::Fn) {
+                self.err_expected("`関数` (kansuu, \"function\")");
+                return Err(());
+            }
+            fns.push(self.parse_fn()?);
+        }
+        self.expect(T::RBrace, "`}`")?;
+        Ok(Item::Impl(ImplItem {
+            ty,
+            fns,
+            span: Span::new(kw.span.start, self.prev_end()),
         }))
     }
 
@@ -505,6 +592,7 @@ impl<'a, 'h> Parser<'a, 'h> {
             return Err(());
         }
         self.bump();
+        let saved_ns = std::mem::replace(&mut self.no_struct, false);
         let mut stmts = Vec::new();
         let mut tail = None;
         while !matches!(self.kind(), T::RBrace | T::Eof) {
@@ -518,6 +606,7 @@ impl<'a, 'h> Parser<'a, 'h> {
                 Err(()) => self.recover_stmt(start),
             }
         }
+        self.no_struct = saved_ns;
         let close = self.expect(T::RBrace, "`}`")?;
         Ok(Block {
             stmts,
@@ -607,19 +696,17 @@ impl<'a, 'h> Parser<'a, 'h> {
                 }
                 Ok(stmt(StmtKind::Expr(e), self.prev_end()))
             }
-            T::Ident(_) if assign_op(self.nth_kind(1)).is_some() => {
-                let target = self.expect_ident("a variable name")?;
-                let op = assign_op(self.kind()).unwrap();
-                self.bump();
-                let value = self.parse_expr(0)?;
-                self.expect_semi();
-                Ok(stmt(
-                    StmtKind::Assign { target, op, value },
-                    self.prev_end(),
-                ))
-            }
             _ => {
                 let e = self.parse_expr(0)?;
+                if let Some(op) = assign_op(self.kind()) {
+                    self.bump();
+                    let value = self.parse_expr(0)?;
+                    self.expect_semi();
+                    return Ok(stmt(
+                        StmtKind::Assign { target: e, op, value },
+                        self.prev_end(),
+                    ));
+                }
                 if self.eat(T::Semi) {
                     return Ok(stmt(StmtKind::Expr(e), self.prev_end()));
                 }
@@ -639,7 +726,7 @@ impl<'a, 'h> Parser<'a, 'h> {
             T::Keyword(Kw::If | Kw::ElseIf) => self.parse_if(),
             T::Keyword(Kw::While) => {
                 let kw = self.bump();
-                let cond = self.parse_expr(0)?;
+                let cond = self.parse_cond()?;
                 let body = self.parse_block()?;
                 let span = Span::new(kw.span.start, body.span.end);
                 Ok(Expr {
@@ -671,9 +758,16 @@ impl<'a, 'h> Parser<'a, 'h> {
         }
     }
 
+    fn parse_cond(&mut self) -> PResult<Expr> {
+        let saved = std::mem::replace(&mut self.no_struct, true);
+        let r = self.parse_expr(0);
+        self.no_struct = saved;
+        r
+    }
+
     fn parse_if(&mut self) -> PResult<Expr> {
         let kw = self.bump(); // `もし` ou `他もし`
-        let cond = self.parse_expr(0)?;
+        let cond = self.parse_cond()?;
         let then = self.parse_block()?;
         let mut end = then.span.end;
         let else_ = match self.kind() {
@@ -740,7 +834,7 @@ impl<'a, 'h> Parser<'a, 'h> {
             let d = self.with_kw_notes(d, t);
             self.emit(d);
         }
-        let iter = self.parse_expr(0)?;
+        let iter = self.parse_cond()?;
         let body = self.parse_block()?;
         let span = Span::new(kw.span.start, body.span.end);
         Ok(Expr {
@@ -756,13 +850,21 @@ impl<'a, 'h> Parser<'a, 'h> {
     // ------------------------------------------------------------ expressoes
 
     fn parse_args(&mut self) -> PResult<Vec<Expr>> {
+        let saved = std::mem::replace(&mut self.no_struct, false);
         let mut args = Vec::new();
         while *self.kind() != T::RParen {
-            args.push(self.parse_expr(0)?);
+            match self.parse_expr(0) {
+                Ok(e) => args.push(e),
+                Err(()) => {
+                    self.no_struct = saved;
+                    return Err(());
+                }
+            }
             if !self.eat(T::Comma) {
                 break;
             }
         }
+        self.no_struct = saved;
         self.expect(T::RParen, "`,` or `)`")?;
         Ok(args)
     }
@@ -785,17 +887,17 @@ impl<'a, 'h> Parser<'a, 'h> {
                 }
                 T::Dot if BP_CALL >= min_bp => {
                     self.bump();
-                    let name = self.expect_ident("a method name")?;
+                    let name = self.expect_ident("a field or method name")?;
                     if *self.kind() != T::LParen {
-                        let t = self.tok();
-                        let d = Diagnostic::error(
-                            E0110,
-                            format!("expected `(` after the method name, found {}", self.describe(t)),
-                        )
-                        .primary(t.span, "expected `(`")
-                        .note("fields (`valor.campo`) arrive together with `構造体` (kouzoutai, \"struct\"); for now only method calls like `texto.長さ()` exist");
-                        self.emit(d);
-                        return Err(());
+                        let span = Span::new(lhs.span.start, name.span.end);
+                        lhs = Expr {
+                            kind: ExprKind::Field {
+                                base: Box::new(lhs),
+                                name,
+                            },
+                            span,
+                        };
+                        continue;
                     }
                     self.bump();
                     let args = self.parse_args()?;
@@ -868,6 +970,19 @@ impl<'a, 'h> Parser<'a, 'h> {
             T::Bang => Some(UnOp::Not),
             _ => None,
         };
+        if matches!(t.kind, T::Amp) {
+            self.bump();
+            let mutable = self.eat(T::Keyword(Kw::Mut));
+            let e = self.parse_expr(BP_PREFIX)?;
+            let span = Span::new(t.span.start, e.span.end);
+            return Ok(Expr {
+                kind: ExprKind::Ref {
+                    mutable,
+                    expr: Box::new(e),
+                },
+                span,
+            });
+        }
         if let Some(op) = op {
             self.bump();
             let e = self.parse_expr(BP_PREFIX)?;
@@ -881,6 +996,28 @@ impl<'a, 'h> Parser<'a, 'h> {
             });
         }
         self.parse_primary()
+    }
+
+    fn parse_struct_lit(&mut self, name: Ident) -> PResult<Expr> {
+        self.bump(); // `{`
+        let saved = std::mem::replace(&mut self.no_struct, false);
+        let mut fields = Vec::new();
+        while *self.kind() != T::RBrace {
+            let f = self.expect_ident("a field name")?;
+            self.expect(T::Colon, "`:`")?;
+            let v = self.parse_expr(0)?;
+            fields.push((f, v));
+            if !self.eat(T::Comma) {
+                break;
+            }
+        }
+        self.no_struct = saved;
+        self.expect(T::RBrace, "`,` or `}`")?;
+        let span = Span::new(name.span.start, self.prev_end());
+        Ok(Expr {
+            kind: ExprKind::StructLit { name, fields },
+            span,
+        })
     }
 
     fn parse_primary(&mut self) -> PResult<Expr> {
@@ -914,12 +1051,36 @@ impl<'a, 'h> Parser<'a, 'h> {
                 self.bump();
                 Ok(lit(ExprKind::Bool(false)))
             }
-            T::Ident(name) => {
+            T::Ident(_) | T::Keyword(Kw::SelfValue | Kw::SelfType) => {
+                let name = match &t.kind {
+                    T::Ident(n) => n.clone(),
+                    T::Keyword(Kw::SelfValue) => "自分".to_string(),
+                    _ => "自身".to_string(),
+                };
                 self.bump();
-                Ok(lit(ExprKind::Path(Ident {
-                    name: name.clone(),
+                let id = Ident {
+                    name,
                     span: t.span,
-                })))
+                };
+                if self.eat(T::ColonColon) {
+                    let member = self.expect_ident("a function name")?;
+                    let span = Span::new(t.span.start, member.span.end);
+                    return Ok(Expr {
+                        kind: ExprKind::AssocPath { ty: id, name: member },
+                        span,
+                    });
+                }
+                if !self.no_struct && *self.kind() == T::LBrace {
+                    let looks_like_lit = match (self.nth_kind(1), self.nth_kind(2)) {
+                        (T::RBrace, _) => true,
+                        (T::Ident(_), T::Colon) => true,
+                        _ => false,
+                    };
+                    if looks_like_lit {
+                        return self.parse_struct_lit(id);
+                    }
+                }
+                Ok(lit(ExprKind::Path(id)))
             }
             T::Macro(name) => {
                 self.bump();
@@ -937,7 +1098,10 @@ impl<'a, 'h> Parser<'a, 'h> {
             }
             T::LParen => {
                 self.bump();
-                let inner = self.parse_expr(0)?;
+                let saved = std::mem::replace(&mut self.no_struct, false);
+                let inner = self.parse_expr(0);
+                self.no_struct = saved;
+                let inner = inner?;
                 self.expect(T::RParen, "`)`")?;
                 Ok(Expr {
                     kind: ExprKind::Paren(Box::new(inner)),
@@ -997,6 +1161,13 @@ mod tests {
                 let a: Vec<String> = args.iter().map(s).collect();
                 format!("(method {} {} {})", s(recv), name.name, a.join(" "))
             }
+            ExprKind::Field { base, name } => format!("(field {} {})", s(base), name.name),
+            ExprKind::AssocPath { ty, name } => format!("(path {}::{})", ty.name, name.name),
+            ExprKind::StructLit { name, fields } => {
+                let f: Vec<String> = fields.iter().map(|(n, v)| format!("{}={}", n.name, s(v))).collect();
+                format!("(lit {} {})", name.name, f.join(" "))
+            }
+            ExprKind::Ref { mutable, expr } => format!("({} {})", if *mutable { "&mut" } else { "&" }, s(expr)),
             ExprKind::MacroCall { name, args, .. } => {
                 let a: Vec<String> = args.iter().map(s).collect();
                 format!("(macro {} {})", name, a.join(" "))
@@ -1058,11 +1229,59 @@ mod tests {
         assert_eq!(expr_of("a.長さ()"), "(method a 長さ )");
         assert_eq!(expr_of("a.f(1).g(2, 3)"), "(method (method a f 1) g 2 3)");
         assert_eq!(expr_of("-a.f() + 1"), "(Add (neg (method a f )) 1)");
-        let file = SourceFile::new("t.nihon", "関数 f() { a.x; }".to_string());
+    }
+
+    #[test]
+    fn fields_refs_and_paths() {
+        assert_eq!(expr_of("a.x"), "(field a x)");
+        assert_eq!(expr_of("a.b.c + 1"), "(Add (field (field a b) c) 1)");
+        assert_eq!(expr_of("a.f(1).x"), "(field (method a f 1) x)");
+        assert_eq!(expr_of("点::新(1)"), "(call (path 点::新) 1)");
+        assert_eq!(expr_of("点 { x: 1, y: 2 }"), "(lit 点 x=1 y=2)");
+        assert_eq!(expr_of("点 { }"), "(lit 点 )");
+        assert_eq!(expr_of("&p.x"), "(& (field p x))");
+        assert_eq!(expr_of("&可変 p"), "(&mut p)");
+        assert_eq!(expr_of("自身::新()"), "(call (path 自身::新) )");
+    }
+
+    #[test]
+    fn struct_literal_is_not_an_if_body() {
+        // `もし x { ... }`: o `{` abre o bloco, nao um literal
+        let e = expr_of("もし x { 1 } 他 { 2 }");
+        assert!(e.starts_with("(if x .."), "{}", e);
+        let e = expr_of("もし x {} 他 {}");
+        assert!(e.starts_with("(if x .."), "{}", e);
+        // entre parenteses o literal volta a valer
+        let e = expr_of("もし x == (点 { x: 1, y: 2 }).x { 1 }");
+        assert!(e.starts_with("(if (Eq x (field"), "{}", e);
+    }
+
+    #[test]
+    fn items_struct_and_impl() {
+        let src = "公開 構造体 点 { 公開 x: 整32, y: &点 }\n実装 点 { 公開 関数 f(&可変 自分, a: 整32) { } 関数 g(自分) { } 関数 h() { } }";
+        let file = SourceFile::new("t.nihon", src.to_string());
         let mut h = Handler::new(Config::default());
         let toks = lex(&file, &mut h);
-        assert!(parse(&file, &toks, &mut h).is_none());
-        assert_eq!(codes(&h.diags), vec!["E0110"]);
+        let prog = parse(&file, &toks, &mut h).expect("parses");
+        assert!(h.diags.is_empty(), "{:?}", codes(&h.diags));
+        let Item::Struct(st) = &prog.items[0] else { panic!() };
+        assert_eq!(st.fields.len(), 2);
+        assert_eq!(st.fields[1].ty.reference, Some(false));
+        let Item::Impl(im) = &prog.items[1] else { panic!() };
+        let kinds: Vec<_> = im.fns.iter().map(|f| f.self_param.map(|s| s.kind)).collect();
+        assert_eq!(kinds, vec![Some(SelfKind::RefMut), Some(SelfKind::Value), None]);
+        assert_eq!(im.fns[0].params.len(), 1);
+    }
+
+    #[test]
+    fn field_assignment_is_a_statement() {
+        let file = SourceFile::new("t.nihon", "関数 f() { p.x = 1; p.a.b += 2; x = 3; }".to_string());
+        let mut h = Handler::new(Config::default());
+        let toks = lex(&file, &mut h);
+        let prog = parse(&file, &toks, &mut h).expect("parses");
+        let Item::Fn(f) = &prog.items[0] else { panic!() };
+        assert_eq!(f.body.stmts.len(), 3);
+        assert!(f.body.stmts.iter().all(|s| matches!(s.kind, StmtKind::Assign { .. })));
     }
 
     #[test]

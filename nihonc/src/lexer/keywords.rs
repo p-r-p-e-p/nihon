@@ -123,14 +123,9 @@ pub fn is_future_keyword(kw: Kw) -> bool {
     matches!(
         kw,
         Kw::Match
-            | Kw::Struct
             | Kw::Enum
-            | Kw::Impl
             | Kw::Trait
-            | Kw::Pub
             | Kw::Use
-            | Kw::SelfValue
-            | Kw::SelfType
             | Kw::Unsafe
             | Kw::Extern
     )

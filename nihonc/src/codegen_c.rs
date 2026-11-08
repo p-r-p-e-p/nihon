@@ -28,6 +28,10 @@ enum Ty {
     Bool,
     Char,
     Str,
+    /// Struct do programa (indice em `Cg::structs`).
+    Struct(u16),
+    /// `&T` (`false`) ou `&可変 T` (`true`), so para structs.
+    Ref(u16, bool),
     Unit,
     /// Expressao que nunca termina (`返却`, `異常終了!`...). Serve para qualquer tipo.
     Never,
@@ -52,22 +56,29 @@ const TYPES: &[TyInfo] = &[
 ];
 
 impl Ty {
-    fn c(self) -> &'static str {
+    fn c(self) -> String {
         match self {
-            Ty::I32 => "int32_t",
-            Ty::U32 | Ty::Char => "uint32_t",
-            Ty::F64 => "double",
-            Ty::Bool => "int",
-            Ty::Str => "nh_str",
-            Ty::Unit | Ty::Never | Ty::Err => "void",
+            Ty::I32 => "int32_t".to_string(),
+            Ty::U32 | Ty::Char => "uint32_t".to_string(),
+            Ty::F64 => "double".to_string(),
+            Ty::Bool => "int".to_string(),
+            Ty::Str => "nh_str".to_string(),
+            Ty::Struct(id) => format!("nhT{}", id),
+            Ty::Ref(id, _) => format!("nhT{}*", id),
+            Ty::Unit | Ty::Never | Ty::Err => "void".to_string(),
         }
+    }
+
+    /// Tipos simples: os que valem em contas, comparacoes e constantes.
+    fn is_simple(self) -> bool {
+        matches!(self, Ty::I32 | Ty::U32 | Ty::F64 | Ty::Bool | Ty::Char | Ty::Str)
     }
 
     fn jp(self) -> &'static str {
         match self {
             Ty::Unit => "()",
             Ty::Never => "!",
-            Ty::Err => "?",
+            Ty::Err | Ty::Struct(_) | Ty::Ref(..) => "?",
             t => TYPES.iter().find(|i| i.ty == t).unwrap().jp,
         }
     }
@@ -76,7 +87,7 @@ impl Ty {
     fn long(self) -> String {
         match self {
             Ty::Unit => "`()` means \"no value\"".to_string(),
-            Ty::Never | Ty::Err => String::new(),
+            Ty::Never | Ty::Err | Ty::Struct(_) | Ty::Ref(..) => String::new(),
             t => {
                 let i = TYPES.iter().find(|i| i.ty == t).unwrap();
                 format!("`{}` ({}) is a {}", i.jp, i.romaji, i.meaning)
@@ -98,16 +109,41 @@ impl Ty {
 }
 
 fn compat(expected: Ty, found: Ty) -> bool {
-    expected == found || found == Ty::Never || found == Ty::Err || expected == Ty::Err
-}
-
-fn bt(t: Ty) -> String {
-    format!("`{}`", t.jp())
+    expected == found
+        || found == Ty::Never
+        || found == Ty::Err
+        || expected == Ty::Err
+        // `&可変 T` serve onde se espera `&T`
+        || matches!((expected, found), (Ty::Ref(a, false), Ty::Ref(b, _)) if a == b)
 }
 
 // ----------------------------------------------------------------- estruturas
 
+struct FieldDef {
+    name: String,
+    ty: Ty,
+    span: Span,
+    cname: String,
+}
+
+struct StructDef {
+    name: String,
+    span: Span,
+    fields: Vec<FieldDef>,
+}
+
+/// Onde um valor mora, para saber se pode receber atribuicao ou emprestimo.
+#[derive(Clone, Copy)]
+struct PlaceInfo {
+    is_place: bool,
+    /// A variavel local no comeco do caminho (`p` em `p.a.b`).
+    root: Option<usize>,
+    /// `Some(mutavel)` quando o caminho passou por uma referencia.
+    via_ref: Option<bool>,
+}
+
 struct FnSig {
+    self_kind: Option<SelfKind>,
     params: Vec<(Ty, Span)>,
     ret: Ty,
     ret_span: Option<Span>,
@@ -213,6 +249,13 @@ struct Cg<'a, 'h> {
     entry: Option<String>,
     /// Tipo escolhido para cada literal inteiro (chave: inicio do span).
     lit_tys: HashMap<usize, Ty>,
+    structs: Vec<StructDef>,
+    struct_ids: HashMap<String, u16>,
+    methods: HashMap<(u16, String), FnSig>,
+    /// Definicoes `typedef struct` em C.
+    types: String,
+    /// A struct do bloco `実装` em que estamos (`自身`).
+    cur_self: Option<u16>,
 }
 
 pub fn generate(file: &SourceFile, prog: &Program, handler: &mut Handler) -> Option<String> {
@@ -236,6 +279,11 @@ pub fn generate(file: &SourceFile, prog: &Program, handler: &mut Handler) -> Opt
         const_deps: HashMap::new(),
         entry: None,
         lit_tys: HashMap::new(),
+        structs: Vec::new(),
+        struct_ids: HashMap::new(),
+        methods: HashMap::new(),
+        types: String::new(),
+        cur_self: None,
     };
     cg.run(prog);
     if cg.handler.error_count() > before {
@@ -418,7 +466,94 @@ impl<'a, 'h> Cg<'a, 'h> {
 
     // ------------------------------------------------------------------ tipos
 
+    fn tjp(&self, t: Ty) -> String {
+        match t {
+            Ty::Struct(id) => self.structs[id as usize].name.clone(),
+            Ty::Ref(id, m) => format!(
+                "&{}{}",
+                if m { "可変 " } else { "" },
+                self.structs[id as usize].name
+            ),
+            t => t.jp().to_string(),
+        }
+    }
+
+    fn bt(&self, t: Ty) -> String {
+        format!("`{}`", self.tjp(t))
+    }
+
+    fn tlong(&self, t: Ty) -> String {
+        match t {
+            Ty::Struct(id) => format!("`{}` is a struct defined in this program", self.structs[id as usize].name),
+            Ty::Ref(id, _) => format!(
+                "`{}` is a reference to a `{}`: it points to the original value",
+                self.tjp(t),
+                self.structs[id as usize].name
+            ),
+            t => t.long(),
+        }
+    }
+
     fn resolve_type(&mut self, t: &Type) -> Ty {
+        let base = self.resolve_base(t);
+        match (t.reference, base) {
+            (None, b) => b,
+            (Some(m), Ty::Struct(id)) => Ty::Ref(id, m),
+            (Some(_), Ty::Err) => Ty::Err,
+            (Some(_), other) => {
+                let d = Diagnostic::error(
+                    E0622,
+                    format!("cannot take a reference to {} for now", self.bt(other)),
+                )
+                .primary(t.span, "references only point to structs for now")
+                .note("references to numbers, text and the other basic types arrive in a later stage");
+                self.emit(d);
+                Ty::Err
+            }
+        }
+    }
+
+    /// Procura uma struct pelo nome (`自身` e a struct do bloco `実装`).
+    fn find_struct(&mut self, id: &Ident) -> Option<u16> {
+        if id.name == "自身" {
+            if let Some(s) = self.cur_self {
+                return Some(s);
+            }
+            let d = Diagnostic::error(E0201, "cannot find type `自身` in this scope")
+                .primary(id.span, "not inside an `実装` block")
+                .note("`自身` (jishin, \"Self\") is the type of the current `実装` (jissou, \"implementation\") block, so it only exists inside one");
+            self.emit(d);
+            return None;
+        }
+        if let Some(&s) = self.struct_ids.get(&id.name) {
+            return Some(s);
+        }
+        let mut d = Diagnostic::error(
+            E0201,
+            format!("cannot find struct `{}` in this scope", id.name),
+        )
+        .primary(id.span, "not found in this scope");
+        let names: Vec<String> = self.structs.iter().map(|s| s.name.clone()).collect();
+        if let Some(sg) = similar(&id.name, names.iter().map(|s| s.as_str())) {
+            d = d.suggest("a struct with a similar name exists", id.span, sg, false);
+        }
+        self.emit(d);
+        None
+    }
+
+    fn resolve_base(&mut self, t: &Type) -> Ty {
+        if t.name == "自身" {
+            let id = Ident { name: t.name.clone(), span: t.span };
+            return match self.find_struct(&id) {
+                Some(s) => Ty::Struct(s),
+                None => Ty::Err,
+            };
+        }
+        if let Some(&id) = self.struct_ids.get(&t.name) {
+            if !TYPES.iter().any(|i| i.jp == t.name || i.romaji == t.name) {
+                return Ty::Struct(id);
+            }
+        }
         for i in TYPES {
             if t.name == i.jp {
                 return i.ty;
@@ -445,8 +580,12 @@ impl<'a, 'h> Cg<'a, 'h> {
             format!("cannot find type `{}` in this scope", t.name),
         )
         .primary(t.span, "not found in this scope");
-        let cands = TYPES.iter().flat_map(|i| [i.jp, i.romaji]);
-        if let Some(s) = similar(&t.name, cands) {
+        let mut cands: Vec<String> = TYPES
+            .iter()
+            .flat_map(|i| [i.jp.to_string(), i.romaji.to_string()])
+            .collect();
+        cands.extend(self.structs.iter().map(|s| s.name.clone()));
+        if let Some(s) = similar(&t.name, cands.iter().map(|s| s.as_str())) {
             let s = TYPES
                 .iter()
                 .find(|i| i.romaji == s)
@@ -454,10 +593,11 @@ impl<'a, 'h> Cg<'a, 'h> {
                 .unwrap_or(s);
             d = d.suggest("a type with a similar name exists", t.span, s, false);
         }
-        let list: Vec<String> = TYPES
+        let mut list: Vec<String> = TYPES
             .iter()
             .map(|i| format!("`{}` ({})", i.jp, i.romaji))
             .collect();
+        list.extend(self.structs.iter().map(|s| format!("`{}`", s.name)));
         d = d.note(format!("available types: {}", list.join(", ")));
         self.emit(d);
         Ty::Err
@@ -470,10 +610,10 @@ impl<'a, 'h> Cg<'a, 'h> {
         }
         d = d.primary(
             e.span,
-            format!("expected {}, found {}", bt(expected), bt(e.ty)),
+            format!("expected {}, found {}", self.bt(expected), self.bt(e.ty)),
         );
         for t in [expected, e.ty] {
-            let n = t.long();
+            let n = self.tlong(t);
             if !n.is_empty() {
                 d = d.note(n);
             }
@@ -493,9 +633,19 @@ impl<'a, 'h> Cg<'a, 'h> {
             d = d.suggest(
                 "convert it with `として` (toshite, \"as\")",
                 Span::new(e.span.end, e.span.end),
-                format!(" として {}", expected.jp()),
+                format!(" として {}", self.tjp(expected)),
                 false,
             );
+        }
+        if let (Ty::Ref(a, m), Ty::Struct(b)) = (expected, e.ty) {
+            if a == b {
+                d = d.suggest(
+                    "borrow it instead of passing it by value",
+                    Span::new(e.span.start, e.span.start),
+                    if m { "&可変 " } else { "&" },
+                    false,
+                );
+            }
         }
         self.emit(d);
     }
@@ -588,32 +738,149 @@ impl<'a, 'h> Cg<'a, 'h> {
 
     // ------------------------------------------------------------------ itens
 
+    /// Tipos dos parametros e do retorno de uma funcao ou metodo.
+    fn sig_parts(&mut self, f: &FnItem, owner: Option<u16>) -> (Vec<(Ty, Span)>, Ty) {
+        let mut params = Vec::new();
+        if let (Some(sp), Some(id)) = (&f.self_param, owner) {
+            let ty = match sp.kind {
+                SelfKind::Value => Ty::Struct(id),
+                SelfKind::Ref => Ty::Ref(id, false),
+                SelfKind::RefMut => Ty::Ref(id, true),
+            };
+            params.push((ty, sp.span));
+        } else if let Some(sp) = &f.self_param {
+            let d = Diagnostic::error(E0201, "`自分` can only be used in methods")
+                .primary(sp.span, "not inside an `実装` block");
+            self.emit(d);
+        }
+        let mut seen: HashMap<&str, Span> = HashMap::new();
+        for p in &f.params {
+            let ty = self.resolve_type(&p.ty);
+            if let Some(first) = seen.get(p.name.name.as_str()) {
+                let d = Diagnostic::error(
+                    E0203,
+                    format!("parameter `{}` is declared more than once", p.name.name),
+                )
+                .secondary(*first, "first declared here")
+                .primary(p.name.span, "declared again here");
+                self.emit(d);
+            } else {
+                seen.insert(&p.name.name, p.name.span);
+            }
+            params.push((ty, p.ty.span));
+        }
+        let mut ret = match &f.ret {
+            Some(t) => self.resolve_type(t),
+            None => Ty::Unit,
+        };
+        if let (Ty::Ref(..), Some(t)) = (ret, &f.ret) {
+            let d = Diagnostic::error(E0622, "functions cannot return references yet")
+                .primary(t.span, "this return type is a reference")
+                .note("without a borrow checker, a returned reference could point to a value that no longer exists")
+                .help("return the struct by value instead");
+            self.emit(d);
+            ret = Ty::Err;
+        }
+        (params, ret)
+    }
+
     fn run(&mut self, prog: &Program) {
+        // 0. structs: nomes, campos e as definicoes em C
+        let mut struct_items: Vec<(&StructItem, u16)> = Vec::new();
+        for item in &prog.items {
+            let Item::Struct(st) = item else { continue };
+            if let Some(first) = self.names.get(&st.name.name) {
+                let d = Diagnostic::error(
+                    E0203,
+                    format!("the name `{}` is defined multiple times", st.name.name),
+                )
+                .secondary(*first, "first definition")
+                .primary(st.name.span, "defined again here");
+                self.emit(d);
+                continue;
+            }
+            self.names.insert(st.name.name.clone(), st.name.span);
+            let id = self.structs.len() as u16;
+            self.structs.push(StructDef {
+                name: st.name.name.clone(),
+                span: st.name.span,
+                fields: Vec::new(),
+            });
+            self.struct_ids.insert(st.name.name.clone(), id);
+            struct_items.push((st, id));
+        }
+        for (st, id) in &struct_items {
+            let mut fields: Vec<FieldDef> = Vec::new();
+            for f in &st.fields {
+                let ty = self.resolve_type(&f.ty);
+                if matches!(ty, Ty::Ref(..)) {
+                    let d = Diagnostic::error(E0622, "struct fields cannot be references yet")
+                        .primary(f.ty.span, "this field type is a reference")
+                        .note("without a borrow checker, a stored reference could outlive the value it points to")
+                        .help("store the struct by value instead");
+                    self.emit(d);
+                    continue;
+                }
+                if let Some(prev) = fields.iter().find(|x| x.name == f.name.name) {
+                    let d = Diagnostic::error(
+                        E0203,
+                        format!("field `{}` is declared more than once", f.name.name),
+                    )
+                    .secondary(prev.span, "first declared here")
+                    .primary(f.name.span, "declared again here");
+                    self.emit(d);
+                    continue;
+                }
+                fields.push(FieldDef {
+                    name: f.name.name.clone(),
+                    ty,
+                    span: f.name.span,
+                    cname: format!("m_{}", &mangle(&f.name.name)[3..]),
+                });
+            }
+            self.structs[*id as usize].fields = fields;
+        }
+        self.emit_struct_types();
+
         // 1. nomes e assinaturas
         for item in &prog.items {
             match item {
-                Item::Fn(f) => {
-                    let mut params = Vec::new();
-                    let mut seen: HashMap<&str, Span> = HashMap::new();
-                    for p in &f.params {
-                        let ty = self.resolve_type(&p.ty);
-                        if let Some(first) = seen.get(p.name.name.as_str()) {
+                Item::Struct(_) => {}
+                Item::Impl(imp) => {
+                    let Some(id) = self.find_struct(&imp.ty) else { continue };
+                    let saved = self.cur_self.replace(id);
+                    for f in &imp.fns {
+                        let (params, ret) = self.sig_parts(f, Some(id));
+                        let key = (id, f.name.name.clone());
+                        if let Some(first) = self.methods.get(&key) {
                             let d = Diagnostic::error(
                                 E0203,
-                                format!("parameter `{}` is declared more than once", p.name.name),
+                                format!(
+                                    "the name `{}` is defined multiple times for `{}`",
+                                    f.name.name, imp.ty.name
+                                ),
                             )
-                            .secondary(*first, "first declared here")
-                            .primary(p.name.span, "declared again here");
+                            .secondary(first.name_span, "first definition")
+                            .primary(f.name.span, "defined again here");
                             self.emit(d);
-                        } else {
-                            seen.insert(&p.name.name, p.name.span);
+                            continue;
                         }
-                        params.push((ty, p.ty.span));
+                        self.methods.insert(
+                            key,
+                            FnSig {
+                                self_kind: f.self_param.map(|sp| sp.kind),
+                                params,
+                                ret,
+                                ret_span: f.ret.as_ref().map(|t| t.span),
+                                name_span: f.name.span,
+                                cname: format!("nhM{}_{}", id, &mangle(&f.name.name)[3..]),
+                            },
+                        );
                     }
-                    let ret = match &f.ret {
-                        Some(t) => self.resolve_type(t),
-                        None => Ty::Unit,
-                    };
+                    self.cur_self = saved;
+                }
+                Item::Fn(f) => {
+                    let (params, ret) = self.sig_parts(f, None);
                     if let Some(first) = self.names.get(&f.name.name) {
                         let d = Diagnostic::error(
                             E0203,
@@ -628,6 +895,7 @@ impl<'a, 'h> Cg<'a, 'h> {
                     self.fns.insert(
                         f.name.name.clone(),
                         FnSig {
+                            self_kind: None,
                             params,
                             ret,
                             ret_span: f.ret.as_ref().map(|t| t.span),
@@ -637,7 +905,14 @@ impl<'a, 'h> Cg<'a, 'h> {
                     );
                 }
                 Item::Const(c) => {
-                    let ty = self.resolve_type(&c.ty);
+                    let mut ty = self.resolve_type(&c.ty);
+                    if !ty.is_simple() && ty != Ty::Err {
+                        let d = Diagnostic::error(E0999, "constants of this type are not supported yet")
+                            .primary(c.ty.span, format!("{} is not a basic type", self.bt(ty)))
+                            .note("constants can be numbers, `真偽`, `文字` and `文字列` for now");
+                        self.emit(d);
+                        ty = Ty::Err;
+                    }
                     if let Some(first) = self.names.get(&c.name.name) {
                         let d = Diagnostic::error(
                             E0203,
@@ -668,7 +943,19 @@ impl<'a, 'h> Cg<'a, 'h> {
             match item {
                 Item::Fn(f) => {
                     if self.fns.get(&f.name.name).map(|s| s.name_span) == Some(f.name.span) {
-                        self.gen_fn(f);
+                        self.gen_fn(f, None);
+                    }
+                }
+                Item::Struct(_) => {}
+                Item::Impl(imp) => {
+                    let Some(&id) = self.struct_ids.get(&imp.ty.name) else {
+                        continue;
+                    };
+                    for f in &imp.fns {
+                        let key = (id, f.name.name.clone());
+                        if self.methods.get(&key).map(|s| s.name_span) == Some(f.name.span) {
+                            self.gen_fn(f, Some(id));
+                        }
                     }
                 }
                 Item::Const(c) => {
@@ -684,6 +971,66 @@ impl<'a, 'h> Cg<'a, 'h> {
         // 4. valores das constantes, calculados agora (erro de conta = erro de compilacao)
         if self.handler.error_count() == 0 {
             self.emit_consts(prog);
+        }
+    }
+
+    /// Escreve os `typedef struct` em C, cada struct depois das que ela contem.
+    fn emit_struct_types(&mut self) {
+        fn visit(id: usize, structs: &[StructDef], state: &mut [u8], order: &mut Vec<usize>) -> bool {
+            match state[id] {
+                1 => return true,
+                2 => return false,
+                _ => {}
+            }
+            state[id] = 1;
+            for f in &structs[id].fields {
+                if let Ty::Struct(c) = f.ty {
+                    if visit(c as usize, structs, state, order) {
+                        return true;
+                    }
+                }
+            }
+            state[id] = 2;
+            order.push(id);
+            false
+        }
+        let n = self.structs.len();
+        let mut state = vec![0u8; n];
+        let mut order = Vec::new();
+        let mut cyclic = false;
+        for id in 0..n {
+            if visit(id, &self.structs, &mut state, &mut order) {
+                let st = &self.structs[id];
+                let d = Diagnostic::error(
+                    E0620,
+                    format!("struct `{}` contains itself, so it would have infinite size", st.name),
+                )
+                .primary(st.span, "recursive struct")
+                .note("a struct cannot hold a copy of itself, directly or through other structs")
+                .help("references cannot be stored in fields yet, so a recursive struct is not possible for now");
+                self.emit(d);
+                // um ciclo so e relatado uma vez
+                for st in state.iter_mut() {
+                    if *st == 1 {
+                        *st = 2;
+                    }
+                }
+                cyclic = true;
+            }
+        }
+        if cyclic {
+            return;
+        }
+        for id in order {
+            let mut text = format!("typedef struct nhT{} {{\n", id);
+            if self.structs[id].fields.is_empty() {
+                text.push_str("char nh_unused;\n");
+            }
+            for f in &self.structs[id].fields {
+                text.push_str(&format!("{} {};\n", f.ty.c(), f.cname));
+            }
+            text.push_str(&format!("}} nhT{};\n\n", id));
+            self.types.push_str(&text);
         }
     }
 
@@ -1043,9 +1390,12 @@ impl<'a, 'h> Cg<'a, 'h> {
         self.buf.clear();
     }
 
-    fn gen_fn(&mut self, f: &FnItem) {
+    fn gen_fn(&mut self, f: &FnItem, owner: Option<u16>) {
         let (params, ret, ret_span, cname) = {
-            let s = &self.fns[&f.name.name];
+            let s = match owner {
+                Some(id) => &self.methods[&(id, f.name.name.clone())],
+                None => &self.fns[&f.name.name],
+            };
             (
                 s.params.iter().map(|p| p.0).collect::<Vec<_>>(),
                 s.ret,
@@ -1054,8 +1404,19 @@ impl<'a, 'h> Cg<'a, 'h> {
             )
         };
         self.begin_body(ret);
+        self.cur_self = owner;
         let mut c_params = Vec::new();
-        for (p, ty) in f.params.iter().zip(&params) {
+        let mut ptys = params.iter();
+        if let Some(sp) = &f.self_param {
+            if let Some(ty) = ptys.next() {
+                let id = Ident { name: "自分".to_string(), span: sp.span };
+                let cn = self.declare(&id, *ty, sp.mutable, None);
+                let li = self.locals.len() - 1;
+                self.locals[li].used = true;
+                c_params.push(format!("{} {}", ty.c(), cn));
+            }
+        }
+        for (p, ty) in f.params.iter().zip(ptys) {
             let cn = self.declare(&p.name, *ty, false, None);
             c_params.push(format!("{} {}", ty.c(), cn));
         }
@@ -1086,6 +1447,7 @@ impl<'a, 'h> Cg<'a, 'h> {
         let head = format!("static {} {}({})", ret.c(), cname, plist);
         self.protos.push_str(&format!("{};\n", head));
         self.defs.push_str(&format!("{} {{\n{}}}\n\n", head, body));
+        self.cur_self = None;
     }
 
     /// Corpo sem valor final numa funcao que devia devolver algo.
@@ -1102,7 +1464,7 @@ impl<'a, 'h> Cg<'a, 'h> {
                 d = Diagnostic::error(E0307, "mismatched types")
                     .primary(
                         *span,
-                        format!("expected {}, found `()` because of the `;`", bt(ret)),
+                        format!("expected {}, found `()` because of the `;`", self.bt(ret)),
                     )
                     .suggest(
                         "remove this semicolon to return the value",
@@ -1111,7 +1473,7 @@ impl<'a, 'h> Cg<'a, 'h> {
                         true,
                     );
                 if let Some(rs) = ret_span {
-                    d = d.secondary(rs, format!("expected {} because of this return type", bt(ret)));
+                    d = d.secondary(rs, format!("expected {} because of this return type", self.bt(ret)));
                 }
                 self.emit(d);
                 return;
@@ -1120,12 +1482,12 @@ impl<'a, 'h> Cg<'a, 'h> {
         d = Diagnostic::error(E0301, "mismatched types")
             .primary(
                 f.body.span,
-                format!("this function body has type `()`, but should return {}", bt(ret)),
+                format!("this function body has type `()`, but should return {}", self.bt(ret)),
             )
             .note("the last expression of a block, without `;`, is the value of the block")
             .help("end the body with a value, or use `返却` (henkyaku, \"return\") on every path");
         if let Some(rs) = ret_span {
-            d = d.secondary(rs, format!("expected {} because of this return type", bt(ret)));
+            d = d.secondary(rs, format!("expected {} because of this return type", self.bt(ret)));
         }
         self.emit(d);
     }
@@ -1135,6 +1497,7 @@ impl<'a, 'h> Cg<'a, 'h> {
         out.push_str("/* generated by nihonc: do not edit */\n");
         out.push_str(RUNTIME);
         out.push('\n');
+        out.push_str(&self.types);
         out.push_str(&self.protos);
         out.push('\n');
         out.push_str(&self.defs);
@@ -1295,7 +1658,137 @@ impl<'a, 'h> Cg<'a, 'h> {
         None
     }
 
-    fn gen_assign(&mut self, target: &Ident, op: AssignOp, value: &Expr) {
+    fn gen_assign(&mut self, target: &Expr, op: AssignOp, value: &Expr) {
+        let mut t = target;
+        while let ExprKind::Paren(x) = &t.kind {
+            t = x;
+        }
+        match &t.kind {
+            ExprKind::Path(id) => self.assign_local(id, op, value),
+            ExprKind::Field { .. } => self.assign_field(t, op, value),
+            _ => {
+                let d = Diagnostic::error(E0628, "invalid left-hand side of assignment")
+                    .primary(target.span, "cannot assign to this expression")
+                    .note("only variables and fields (`p.x`) can be assigned to");
+                self.emit(d);
+                let _ = self.gen_expr(value, None);
+            }
+        }
+    }
+
+    fn assign_field(&mut self, target: &Expr, op: AssignOp, value: &Expr) {
+        let (pv, pi) = self.gen_place(target);
+        let v = self.gen_expr(value, Some(pv.ty));
+        if matches!(pv.ty, Ty::Err | Ty::Never) {
+            return;
+        }
+        if !pi.is_place {
+            let d = Diagnostic::error(E0628, "cannot assign to a field of a temporary value")
+                .primary(target.span, "this value is not stored in a variable")
+                .help("store it in a variable first with `束縛 可変` (sokubaku kahen, \"let mut\")");
+            self.emit(d);
+            return;
+        }
+        if !self.require_mutable(&pi, target.span, "assign to") {
+            return;
+        }
+        match op {
+            AssignOp::Set => {
+                self.check(&v, pv.ty, Some(value));
+                if v.ty != Ty::Never && !v.c.is_empty() {
+                    self.line(format!("{} = {};", pv.c, v.c));
+                }
+            }
+            _ => {
+                let bop = match op {
+                    AssignOp::Add => BinOp::Add,
+                    AssignOp::Sub => BinOp::Sub,
+                    AssignOp::Mul => BinOp::Mul,
+                    AssignOp::Div => BinOp::Div,
+                    _ => BinOp::Rem,
+                };
+                let lhs = Val {
+                    c: pv.c.clone(),
+                    ty: pv.ty,
+                    span: target.span,
+                };
+                let span = Span::new(target.span.start, value.span.end);
+                if let Some(r) = self.arith(bop, lhs, v, span, None) {
+                    self.line(format!("{} = {};", pv.c, r.c));
+                }
+            }
+        }
+    }
+
+    /// Confere se o lugar pode ser mudado (ou emprestado como `&可変`).
+    fn require_mutable(&mut self, info: &PlaceInfo, span: Span, action: &str) -> bool {
+        let act = |text: &str| {
+            if action == "borrow as mutable" {
+                format!("borrow `{}` as mutable", text)
+            } else {
+                format!("{} `{}`", action, text)
+            }
+        };
+        match (info.via_ref, info.root) {
+            (Some(true), _) => {
+                if let Some(r) = info.root {
+                    self.locals[r].assigned = true;
+                }
+                true
+            }
+            (Some(false), _) => {
+                let d = Diagnostic::error(
+                    E0401,
+                    format!("cannot {}, which is behind a `&` reference", act(self.text(span))),
+                )
+                .primary(span, "this reference does not allow changes")
+                .help("take it as `&可変` (kahen, \"mutable\") instead of `&`");
+                self.emit(d);
+                false
+            }
+            (None, Some(r)) => {
+                if self.locals[r].mutable {
+                    self.locals[r].assigned = true;
+                    return true;
+                }
+                let (name, decl_span, is_param) = {
+                    let l = &self.locals[r];
+                    (
+                        l.name.clone(),
+                        l.span,
+                        l.mut_span.is_none() && self.scopes.first().map_or(false, |sc| sc.contains(&r)),
+                    )
+                };
+                let mut d = Diagnostic::error(
+                    E0401,
+                    format!("cannot {}, as `{}` is not declared as mutable", act(self.text(span)), name),
+                )
+                .primary(span, "not mutable")
+                .secondary(decl_span, format!("`{}` is declared here", name));
+                if is_param {
+                    d = d.note("function parameters are always immutable")
+                        .help("copy it into a mutable variable first: `束縛 可変 x = x;` (sokubaku kahen, \"let mut\")");
+                } else {
+                    d = d.suggest(
+                        "consider making this binding mutable with `可変` (kahen, \"mutable\")",
+                        Span::new(decl_span.start, decl_span.start),
+                        "可変 ",
+                        false,
+                    );
+                }
+                self.emit(d);
+                false
+            }
+            (None, None) => {
+                let d = Diagnostic::error(E0401, format!("cannot {} a temporary value", action))
+                    .primary(span, "this value is not stored in a variable");
+                self.emit(d);
+                false
+            }
+        }
+    }
+
+    fn assign_local(&mut self, target: &Ident, op: AssignOp, value: &Expr) {
         let Some(idx) = self.lookup_local(&target.name) else {
             let mut d = Diagnostic::error(
                 E0201,
@@ -1413,7 +1906,39 @@ impl<'a, 'h> Cg<'a, 'h> {
                 v.span = span;
                 v
             }
-            ExprKind::Path(id) => self.gen_path(id),
+            ExprKind::Path(id) => {
+                let v = self.gen_path(id);
+                // struct lida de uma variavel: copia na hora (como no Rust, ela "move")
+                if matches!(v.ty, Ty::Struct(_)) && self.lookup_local(&id.name).is_some() {
+                    let t = self.tmp();
+                    self.line(format!("{} {} = {};", v.ty.c(), t, v.c));
+                    Val { c: t, ..v }
+                } else {
+                    v
+                }
+            }
+            ExprKind::Field { .. } => {
+                let (v, i) = self.gen_place(e);
+                if i.is_place && v.ty.has_value() {
+                    let t = self.tmp();
+                    self.line(format!("{} {} = {};", v.ty.c(), t, v.c));
+                    Val { c: t, ..v }
+                } else {
+                    v
+                }
+            }
+            ExprKind::AssocPath { ty, name } => {
+                let d = Diagnostic::error(
+                    E0202,
+                    format!("function `{}::{}` is used as a value", ty.name, name.name),
+                )
+                .primary(e.span, "functions are not values yet")
+                .help(format!("call it: `{}::{}(...)`", ty.name, name.name));
+                self.emit(d);
+                self.err_val(span)
+            }
+            ExprKind::StructLit { name, fields } => self.gen_struct_lit(name, fields, span),
+            ExprKind::Ref { mutable, expr } => self.gen_ref(*mutable, expr, span),
             ExprKind::Unary { op, expr } => self.gen_unary(*op, expr, expect, span),
             ExprKind::Binary { op, lhs, rhs } => self.gen_binary(*op, lhs, rhs, expect, span),
             ExprKind::Cast { expr, ty } => self.gen_cast(expr, ty, span),
@@ -1484,8 +2009,8 @@ impl<'a, 'h> Cg<'a, 'h> {
         if !ok {
             let (lo, hi) = if ty == Ty::U32 { ("0", "4294967295") } else { ("-2147483648", "2147483647") };
             let d = Diagnostic::error(E0306, "integer literal is out of range")
-                .primary(span, format!("does not fit in {}", bt(ty)))
-                .note(format!("the range of {} is {} to {}", bt(ty), lo, hi));
+                .primary(span, format!("does not fit in {}", self.bt(ty)))
+                .note(format!("the range of {} is {} to {}", self.bt(ty), lo, hi));
             self.emit(d);
             return self.err_val(span);
         }
@@ -1519,7 +2044,9 @@ impl<'a, 'h> Cg<'a, 'h> {
             format!("cannot find value `{}` in this scope", id.name),
         )
         .primary(id.span, "not found in this scope");
-        if self.fns.contains_key(&id.name) {
+        if id.name == "自分" {
+            d = d.note("`自分` (jibun, \"self\") only exists inside a method that takes it as its first parameter");
+        } else if self.fns.contains_key(&id.name) {
             d = d.note(format!(
                 "`{}` is a function; call it with `{}(...)`",
                 id.name, id.name
@@ -1582,9 +2109,9 @@ impl<'a, 'h> Cg<'a, 'h> {
     fn bad_unary(&mut self, op: &str, t: Ty, span: Span, operand: Span) -> Val {
         let mut d = Diagnostic::error(
             E0304,
-            format!("cannot apply unary operator `{}` to type {}", op, bt(t)),
+            format!("cannot apply unary operator `{}` to type {}", op, self.bt(t)),
         )
-        .primary(span, format!("cannot apply `{}` to {}", op, bt(t)));
+        .primary(span, format!("cannot apply `{}` to {}", op, self.bt(t)));
         if t == Ty::U32 && op == "-" {
             d = d.note("unsigned numbers cannot be negative");
         }
@@ -1647,7 +2174,7 @@ impl<'a, 'h> Cg<'a, 'h> {
             let (text, num) = if l.ty == Ty::Str { (&l, &r) } else { (&r, &l) };
             let d = Diagnostic::error(E0617, "cannot add a number to text")
                 .secondary(text.span, "text (`文字列`, mojiretsu)")
-                .secondary(num.span, format!("number ({})", bt(num.ty)))
+                .secondary(num.span, format!("number ({})", self.bt(num.ty)))
                 .primary(span, "`+` joins two texts, not a text and a number")
                 .help("build the text with `整形!` (seikei!, \"format!\"), for example `整形!(\"{}{}\", a, b)`");
             self.emit(d);
@@ -1659,24 +2186,30 @@ impl<'a, 'h> Cg<'a, 'h> {
         let op_span = Span::new(gs + lead, gs + lead + between.trim().len());
         let mut d = Diagnostic::error(
             E0304,
-            format!("cannot apply `{}` to {} and {}", o, bt(l.ty), bt(r.ty)),
+            format!("cannot apply `{}` to {} and {}", o, self.bt(l.ty), self.bt(r.ty)),
         )
-        .secondary(l.span, bt(l.ty))
-        .secondary(r.span, bt(r.ty))
+        .secondary(l.span, self.bt(l.ty))
+        .secondary(r.span, self.bt(r.ty))
         .primary(
             op_span,
-            format!("no implementation for `{} {} {}`", l.ty.jp(), o, r.ty.jp()),
+            format!("no implementation for `{} {} {}`", self.tjp(l.ty), o, self.tjp(r.ty)),
         );
-        for t in [l.ty, r.ty] {
-            let n = t.long();
+        for (i, t) in [l.ty, r.ty].into_iter().enumerate() {
+            if i == 1 && l.ty == r.ty {
+                break;
+            }
+            let n = self.tlong(t);
             if !n.is_empty() {
                 d = d.note(n);
             }
         }
+        if let (Ty::Struct(_), true) = (l.ty, l.ty == r.ty) {
+            d = d.help("compare the fields one by one, for example `a.x == b.x`");
+        }
         if l.ty.is_num() && r.ty.is_num() {
             d = d.help(format!(
                 "both sides must have the same type; convert one with `として` (toshite, \"as\"), for example `x として {}`",
-                l.ty.jp()
+                self.tjp(l.ty)
             ));
         }
         self.emit(d);
@@ -1746,7 +2279,7 @@ impl<'a, 'h> Cg<'a, 'h> {
             };
         }
         let eq = matches!(op, BinOp::Eq | BinOp::Ne);
-        let ok = l.ty == r.ty && l.ty.has_value() && (eq || l.ty != Ty::Bool);
+        let ok = l.ty == r.ty && l.ty.is_simple() && (eq || l.ty != Ty::Bool);
         if !ok {
             self.bad_binary(op, &l, &r, span);
             return self.err_val(span);
@@ -1817,7 +2350,7 @@ impl<'a, 'h> Cg<'a, 'h> {
         if !ok {
             let mut d = Diagnostic::error(
                 E0305,
-                format!("cannot cast {} as {}", bt(from), bt(target)),
+                format!("cannot cast {} as {}", self.bt(from), self.bt(target)),
             )
             .primary(span, "invalid cast");
             d = d.note("`として` (toshite, \"as\") converts between numbers; `真偽` and `文字` can only become integers");
@@ -1839,6 +2372,9 @@ impl<'a, 'h> Cg<'a, 'h> {
     }
 
     fn gen_call(&mut self, callee: &Expr, args: &[Expr], span: Span) -> Val {
+        if let ExprKind::AssocPath { ty, name } = &callee.kind {
+            return self.gen_assoc_call(ty, name, args, span);
+        }
         let ExprKind::Path(id) = &callee.kind else {
             let d = Diagnostic::error(E0301, "expected a function name")
                 .primary(callee.span, "only named functions can be called");
@@ -1858,7 +2394,7 @@ impl<'a, 'h> Cg<'a, 'h> {
                 let t = self.locals[i].ty;
                 let d = Diagnostic::error(
                     E0301,
-                    format!("expected function, found {}", bt(t)),
+                    format!("expected function, found {}", self.bt(t)),
                 )
                 .primary(id.span, format!("`{}` is a variable, not a function", id.name))
                 .secondary(self.locals[i].span, "variable defined here");
@@ -1883,11 +2419,30 @@ impl<'a, 'h> Cg<'a, 'h> {
             let s = &self.fns[&id.name];
             (s.params.clone(), s.ret, s.name_span, s.cname.clone())
         };
-        let mut vals = Vec::new();
+        self.call_common(&cname, &params, ret, name_span, Vec::new(), args, span, id.span, "function")
+    }
+
+    /// Confere os argumentos e escreve a chamada. `pre` sao argumentos ja
+    /// prontos (o `自分` de um metodo).
+    #[allow(clippy::too_many_arguments)]
+    fn call_common(
+        &mut self,
+        cname: &str,
+        params: &[(Ty, Span)],
+        ret: Ty,
+        name_span: Span,
+        pre: Vec<Val>,
+        args: &[Expr],
+        span: Span,
+        at: Span,
+        what: &str,
+    ) -> Val {
+        let skip = pre.len();
+        let mut vals = pre;
         for (i, a) in args.iter().enumerate() {
-            let exp = params.get(i).map(|p| p.0);
-            let v = self.gen_expr(a, exp);
-            if let Some((pty, pspan)) = params.get(i) {
+            let p = params.get(skip + i);
+            let v = self.gen_expr(a, p.map(|p| p.0));
+            if let Some((pty, pspan)) = p {
                 if !compat(*pty, v.ty) {
                     self.mismatch(
                         &v,
@@ -1899,18 +2454,20 @@ impl<'a, 'h> Cg<'a, 'h> {
             }
             vals.push(v);
         }
-        if args.len() != params.len() {
+        let want = params.len().saturating_sub(skip);
+        if args.len() != want {
             let d = Diagnostic::error(
                 E0302,
                 format!(
-                    "this function takes {} but {} {} supplied",
-                    plural(params.len(), "argument", "arguments"),
+                    "this {} takes {} but {} {} supplied",
+                    what,
+                    plural(want, "argument", "arguments"),
                     plural(args.len(), "argument", "arguments"),
                     if args.len() == 1 { "was" } else { "were" }
                 ),
             )
-            .secondary(name_span, "function defined here")
-            .primary(id.span, format!("expected {}", plural(params.len(), "argument", "arguments")));
+            .secondary(name_span, format!("{} defined here", what))
+            .primary(at, format!("expected {}", plural(want, "argument", "arguments")));
             self.emit(d);
             return self.err_val(span);
         }
@@ -1930,6 +2487,377 @@ impl<'a, 'h> Cg<'a, 'h> {
         }
     }
 
+    fn gen_args_only(&mut self, args: &[Expr]) {
+        for a in args {
+            let _ = self.gen_expr(a, None);
+        }
+    }
+
+    /// `点::原点(...)`: funcao associada de uma struct.
+    fn gen_assoc_call(&mut self, ty: &Ident, name: &Ident, args: &[Expr], span: Span) -> Val {
+        if self.cur_const.is_some() {
+            let d = Diagnostic::error(E0207, "function calls are not allowed in constants")
+                .primary(span, "call in a constant")
+                .note("constants are evaluated without running user code (for now)");
+            self.emit(d);
+            return self.err_val(span);
+        }
+        let Some(id) = self.find_struct(ty) else {
+            self.gen_args_only(args);
+            return self.err_val(span);
+        };
+        let key = (id, name.name.clone());
+        let Some(sig) = self.methods.get(&key) else {
+            let sname = self.structs[id as usize].name.clone();
+            let mut d = Diagnostic::error(
+                E0202,
+                format!("no function named `{}` found for struct `{}`", name.name, sname),
+            )
+            .primary(name.span, "not found");
+            let cands: Vec<String> = self
+                .methods
+                .keys()
+                .filter(|k| k.0 == id)
+                .map(|k| k.1.clone())
+                .collect();
+            if let Some(sg) = similar(&name.name, cands.iter().map(|s| s.as_str())) {
+                d = d.suggest("a function with a similar name exists", name.span, sg, false);
+            }
+            self.emit(d);
+            self.gen_args_only(args);
+            return self.err_val(span);
+        };
+        let (params, ret, name_span, cname) = (sig.params.clone(), sig.ret, sig.name_span, sig.cname.clone());
+        self.call_common(&cname, &params, ret, name_span, Vec::new(), args, span, name.span, "function")
+    }
+
+    /// `&x` / `&可変 x`.
+    fn gen_ref(&mut self, mutable: bool, inner: &Expr, span: Span) -> Val {
+        let (v, info) = self.gen_place(inner);
+        let id = match v.ty {
+            Ty::Struct(id) => id,
+            Ty::Err | Ty::Never => return self.err_val(span),
+            Ty::Ref(..) => {
+                let d = Diagnostic::error(E0622, "cannot take a reference to a reference")
+                    .primary(span, "this value already is a reference")
+                    .help("pass it as it is");
+                self.emit(d);
+                return self.err_val(span);
+            }
+            t => {
+                let d = Diagnostic::error(
+                    E0622,
+                    format!("cannot take a reference to {} for now", self.bt(t)),
+                )
+                .primary(span, "references only point to structs for now");
+                self.emit(d);
+                return self.err_val(span);
+            }
+        };
+        if mutable && !self.require_mutable(&info, inner.span, "borrow as mutable") {
+            return self.err_val(span);
+        }
+        let base = if info.is_place {
+            v.c
+        } else {
+            let t = self.tmp();
+            self.line(format!("{} {} = {};", v.ty.c(), t, v.c));
+            t
+        };
+        Val {
+            c: format!("(&{})", base),
+            ty: Ty::Ref(id, mutable),
+            span,
+        }
+    }
+
+    /// Expressao que pode ser um "lugar" (variavel ou campo de um lugar).
+    fn gen_place(&mut self, e: &Expr) -> (Val, PlaceInfo) {
+        match &e.kind {
+            ExprKind::Paren(inner) => {
+                let (mut v, i) = self.gen_place(inner);
+                v.span = e.span;
+                (v, i)
+            }
+            ExprKind::Path(id) if self.lookup_local(&id.name).is_some() => {
+                let idx = self.lookup_local(&id.name).unwrap();
+                let v = self.gen_path(id);
+                (
+                    v,
+                    PlaceInfo {
+                        is_place: true,
+                        root: Some(idx),
+                        via_ref: None,
+                    },
+                )
+            }
+            ExprKind::Field { base, name } => {
+                let (bv, bi) = self.gen_place(base);
+                self.field_of(bv, bi, name, e.span)
+            }
+            _ => {
+                let v = self.gen_expr(e, None);
+                (
+                    v,
+                    PlaceInfo {
+                        is_place: false,
+                        root: None,
+                        via_ref: None,
+                    },
+                )
+            }
+        }
+    }
+
+    fn field_of(&mut self, bv: Val, bi: PlaceInfo, name: &Ident, span: Span) -> (Val, PlaceInfo) {
+        let no = PlaceInfo {
+            is_place: false,
+            root: None,
+            via_ref: None,
+        };
+        let (id, through) = match bv.ty {
+            Ty::Struct(id) => (id, None),
+            Ty::Ref(id, m) => (id, Some(m)),
+            Ty::Err | Ty::Never => return (self.err_val(span), no),
+            t => {
+                let d = Diagnostic::error(
+                    E0626,
+                    format!("no field `{}` on type {}", name.name, self.bt(t)),
+                )
+                .primary(name.span, "unknown field")
+                .note("only structs have fields");
+                self.emit(d);
+                return (self.err_val(span), no);
+            }
+        };
+        let found = self.structs[id as usize]
+            .fields
+            .iter()
+            .find(|f| f.name == name.name)
+            .map(|f| (f.ty, f.cname.clone()));
+        let Some((fty, fc)) = found else {
+            let sname = self.structs[id as usize].name.clone();
+            let names: Vec<String> = self.structs[id as usize].fields.iter().map(|f| f.name.clone()).collect();
+            let mut d = Diagnostic::error(
+                E0626,
+                format!("no field `{}` on struct `{}`", name.name, sname),
+            )
+            .primary(name.span, "unknown field");
+            if let Some(sg) = similar(&name.name, names.iter().map(|s| s.as_str())) {
+                d = d.suggest("a field with a similar name exists", name.span, sg, false);
+            }
+            if names.is_empty() {
+                d = d.note(format!("`{}` has no fields", sname));
+            } else {
+                d = d.note(format!(
+                    "available fields: {}",
+                    names.iter().map(|n| format!("`{}`", n)).collect::<Vec<_>>().join(", ")
+                ));
+            }
+            self.emit(d);
+            return (self.err_val(span), no);
+        };
+        let c = match through {
+            Some(_) => format!("{}->{}", bv.c, fc),
+            None => format!("{}.{}", bv.c, fc),
+        };
+        let info = match through {
+            Some(m) => PlaceInfo {
+                is_place: true,
+                root: bi.root,
+                via_ref: Some(m),
+            },
+            None => bi,
+        };
+        (Val { c, ty: fty, span }, info)
+    }
+
+    /// `点 { x: 1, y: 2 }`.
+    fn gen_struct_lit(&mut self, name: &Ident, fields: &[(Ident, Expr)], span: Span) -> Val {
+        let Some(id) = self.find_struct(name) else {
+            for (_, v) in fields {
+                let _ = self.gen_expr(v, None);
+            }
+            return self.err_val(span);
+        };
+        let sname = self.structs[id as usize].name.clone();
+        let defs: Vec<(String, Ty, String)> = self.structs[id as usize]
+            .fields
+            .iter()
+            .map(|f| (f.name.clone(), f.ty, f.cname.clone()))
+            .collect();
+        let mut given: Vec<Option<String>> = vec![None; defs.len()];
+        let mut failed = false;
+        for (fname, expr) in fields {
+            match defs.iter().position(|d| d.0 == fname.name) {
+                None => {
+                    let mut d = Diagnostic::error(
+                        E0624,
+                        format!("struct `{}` has no field named `{}`", sname, fname.name),
+                    )
+                    .primary(fname.span, "unknown field");
+                    if let Some(sg) = similar(&fname.name, defs.iter().map(|d| d.0.as_str())) {
+                        d = d.suggest("a field with a similar name exists", fname.span, sg, false);
+                    }
+                    self.emit(d);
+                    let _ = self.gen_expr(expr, None);
+                    failed = true;
+                }
+                Some(i) => {
+                    let v = self.gen_expr(expr, Some(defs[i].1));
+                    if given[i].is_some() {
+                        let d = Diagnostic::error(
+                            E0625,
+                            format!("field `{}` is given more than once", fname.name),
+                        )
+                        .primary(fname.span, "given again here");
+                        self.emit(d);
+                        failed = true;
+                        continue;
+                    }
+                    self.check(&v, defs[i].1, Some(expr));
+                    given[i] = Some(if v.c.is_empty() { "0".to_string() } else { v.c });
+                }
+            }
+        }
+        let missing: Vec<String> = defs
+            .iter()
+            .zip(&given)
+            .filter(|(_, g)| g.is_none())
+            .map(|(d, _)| format!("`{}`", d.0))
+            .collect();
+        if !missing.is_empty() && !failed {
+            let d = Diagnostic::error(
+                E0623,
+                format!(
+                    "missing {} in the initializer of `{}`: {}",
+                    if missing.len() == 1 { "field" } else { "fields" },
+                    sname,
+                    missing.join(", ")
+                ),
+            )
+            .primary(span, format!("missing {}", missing.join(", ")));
+            self.emit(d);
+            failed = true;
+        }
+        if failed {
+            return self.err_val(span);
+        }
+        let c = if defs.is_empty() {
+            format!("((nhT{}){{0}})", id)
+        } else {
+            let parts: Vec<String> = defs
+                .iter()
+                .zip(given)
+                .map(|(d, g)| format!(".{} = {}", d.2, g.unwrap()))
+                .collect();
+            format!("((nhT{}){{{}}})", id, parts.join(", "))
+        };
+        Val {
+            c,
+            ty: Ty::Struct(id),
+            span,
+        }
+    }
+
+    /// `p.mover(...)`: metodo de uma struct.
+    #[allow(clippy::too_many_arguments)]
+    fn gen_user_method(
+        &mut self,
+        id: u16,
+        r: Val,
+        ri: PlaceInfo,
+        recv: &Expr,
+        name: &Ident,
+        args: &[Expr],
+        span: Span,
+    ) -> Val {
+        let sname = self.structs[id as usize].name.clone();
+        let key = (id, name.name.clone());
+        let Some(sig) = self.methods.get(&key) else {
+            let mut d = Diagnostic::error(
+                E0613,
+                format!("no method named `{}` found for struct `{}`", name.name, sname),
+            )
+            .primary(name.span, "method not found");
+            let cands: Vec<String> = self
+                .methods
+                .iter()
+                .filter(|(k, s)| k.0 == id && s.self_kind.is_some())
+                .map(|(k, _)| k.1.clone())
+                .collect();
+            if let Some(sg) = similar(&name.name, cands.iter().map(|s| s.as_str())) {
+                d = d.suggest("a method with a similar name exists", name.span, sg, false);
+            }
+            self.emit(d);
+            self.gen_args_only(args);
+            return self.err_val(span);
+        };
+        let (params, ret, name_span, cname, kind) =
+            (sig.params.clone(), sig.ret, sig.name_span, sig.cname.clone(), sig.self_kind);
+        let Some(kind) = kind else {
+            let d = Diagnostic::error(
+                E0631,
+                format!("`{}` is an associated function, not a method", name.name),
+            )
+            .primary(name.span, "it has no `自分` parameter")
+            .secondary(name_span, "defined here")
+            .help(format!("call it as `{}::{}(...)`", sname, name.name));
+            self.emit(d);
+            self.gen_args_only(args);
+            return self.err_val(span);
+        };
+        let recv_val = match kind {
+            SelfKind::Value => match r.ty {
+                Ty::Ref(..) => Val {
+                    c: format!("(*{})", r.c),
+                    ty: Ty::Struct(id),
+                    span: recv.span,
+                },
+                _ => r,
+            },
+            SelfKind::Ref | SelfKind::RefMut => {
+                let m = kind == SelfKind::RefMut;
+                match r.ty {
+                    Ty::Ref(_, rm) => {
+                        if m && !rm {
+                            let d = Diagnostic::error(
+                                E0401,
+                                format!("cannot borrow `{}` as mutable, as it is behind a `&` reference", self.text(recv.span)),
+                            )
+                            .primary(recv.span, "this reference does not allow changes")
+                            .secondary(name_span, "this method needs `&可変 自分`")
+                            .help("take it as `&可変` (kahen, \"mutable\") instead of `&`");
+                            self.emit(d);
+                            self.gen_args_only(args);
+                            return self.err_val(span);
+                        }
+                        r
+                    }
+                    _ => {
+                        if m && !self.require_mutable(&ri, recv.span, "borrow as mutable") {
+                            self.gen_args_only(args);
+                            return self.err_val(span);
+                        }
+                        let base = if ri.is_place {
+                            r.c.clone()
+                        } else {
+                            let t = self.tmp();
+                            self.line(format!("{} {} = {};", r.ty.c(), t, r.c));
+                            t
+                        };
+                        Val {
+                            c: format!("(&{})", base),
+                            ty: Ty::Ref(id, m),
+                            span: recv.span,
+                        }
+                    }
+                }
+            }
+        };
+        self.call_common(&cname, &params, ret, name_span, vec![recv_val], args, span, name.span, "method")
+    }
+
     // ---------------------------------------------------------------- metodos
 
     fn gen_method(&mut self, recv: &Expr, name: &Ident, args: &[Expr], span: Span) -> Val {
@@ -1937,7 +2865,10 @@ impl<'a, 'h> Cg<'a, 'h> {
             ("長さ", "nagasa", "length in characters", "nh_str_chars"),
             ("バイト数", "baitosuu", "length in bytes", "nh_str_bytes"),
         ];
-        let r = self.gen_expr(recv, None);
+        let (r, ri) = self.gen_place(recv);
+        if let Ty::Struct(id) | Ty::Ref(id, _) = r.ty {
+            return self.gen_user_method(id, r, ri, recv, name, args, span);
+        }
         for a in args {
             let _ = self.gen_expr(a, None);
         }
@@ -1951,7 +2882,7 @@ impl<'a, 'h> Cg<'a, 'h> {
         if r.ty != Ty::Str {
             let d = Diagnostic::error(
                 E0613,
-                format!("no method named `{}` found for type {}", name.name, bt(r.ty)),
+                format!("no method named `{}` found for type {}", name.name, self.bt(r.ty)),
             )
             .primary(name.span, "method not found")
             .note(format!("only `文字列` (mojiretsu, \"text\") has methods for now: {}", list.join(", ")));
@@ -1961,7 +2892,7 @@ impl<'a, 'h> Cg<'a, 'h> {
         let Some(m) = METHODS.iter().find(|m| m.0 == name.name || m.1 == name.name) else {
             let mut d = Diagnostic::error(
                 E0613,
-                format!("no method named `{}` found for type {}", name.name, bt(Ty::Str)),
+                format!("no method named `{}` found for type {}", name.name, self.bt(Ty::Str)),
             )
             .primary(name.span, "method not found");
             let cands = METHODS.iter().flat_map(|m| [m.0, m.1]);
@@ -2125,9 +3056,17 @@ impl<'a, 'h> Cg<'a, 'h> {
         let mut vals: Vec<Val> = Vec::new();
         for a in fmt_args {
             let v = self.gen_expr(a, None);
-            if !v.ty.has_value() && v.ty != Ty::Err && v.ty != Ty::Never {
+            if matches!(v.ty, Ty::Struct(_) | Ty::Ref(..)) {
+                let d = Diagnostic::error(
+                    E0629,
+                    format!("{} cannot be shown with `{{}}`", self.bt(v.ty)),
+                )
+                .primary(a.span, "structs have no text form yet")
+                .help("show the fields one by one, for example `表示!(\"{}\", p.x)` (hyouji!)");
+                self.emit(d);
+            } else if !v.ty.has_value() && v.ty != Ty::Err && v.ty != Ty::Never {
                 let d = Diagnostic::error(E0301, "this value cannot be printed")
-                    .primary(a.span, format!("has type {}, which has no value to show", bt(v.ty)));
+                    .primary(a.span, format!("has type {}, which has no value to show", self.bt(v.ty)));
                 self.emit(d);
             }
             vals.push(v);
@@ -2238,7 +3177,7 @@ impl<'a, 'h> Cg<'a, 'h> {
 
     fn cond_error(&mut self, v: &Val) {
         let d = Diagnostic::error(E0303, "mismatched types")
-            .primary(v.span, format!("expected {}, found {}", bt(Ty::Bool), bt(v.ty)))
+            .primary(v.span, format!("expected {}, found {}", self.bt(Ty::Bool), self.bt(v.ty)))
             .note("a condition must be `真偽` (shingi, \"boolean\"): a comparison like `x > 0`, or `真` / `偽` (shin / gi, \"true\" / \"false\")");
         self.emit(d);
     }
@@ -2261,7 +3200,7 @@ impl<'a, 'h> Cg<'a, 'h> {
             let (ts, tr) = self.capture(|s| s.gen_block(then, None));
             if tr.ty.has_value() {
                 let d = Diagnostic::error(E0301, "`もし` may be missing an `他` clause")
-                    .primary(tr.span, format!("expected `()`, found {}", bt(tr.ty)))
+                    .primary(tr.span, format!("expected `()`, found {}", self.bt(tr.ty)))
                     .secondary(cond.span, "this `もし` has no `他` (hoka, \"else\")")
                     .note("without an `他` block, the `もし` cannot produce a value");
                 self.emit(d);
@@ -2289,8 +3228,8 @@ impl<'a, 'h> Cg<'a, 'h> {
             tr.ty
         } else {
             let d = Diagnostic::error(E0301, "`もし` and `他` have incompatible types")
-                .secondary(tr.span, format!("expected because of this: {}", bt(tr.ty)))
-                .primary(er.span, format!("expected {}, found {}", bt(tr.ty), bt(er.ty)))
+                .secondary(tr.span, format!("expected because of this: {}", self.bt(tr.ty)))
+                .primary(er.span, format!("expected {}, found {}", self.bt(tr.ty), self.bt(er.ty)))
                 .note("both branches of a `もし` / `他` must produce the same type");
             self.emit(d);
             Ty::Err
@@ -2347,12 +3286,12 @@ impl<'a, 'h> Cg<'a, 'h> {
         };
         let mut ty = s.ty;
         if s.ty != Ty::Err && !s.ty.is_int() {
-            let d = Diagnostic::error(E0304, format!("a range needs integers, found {}", bt(s.ty)))
-                .primary(s.span, format!("has type {}", bt(s.ty)));
+            let d = Diagnostic::error(E0304, format!("a range needs integers, found {}", self.bt(s.ty)))
+                .primary(s.span, format!("has type {}", self.bt(s.ty)));
             self.emit(d);
             ty = Ty::Err;
         } else if e.ty != Ty::Err && s.ty != Ty::Err && e.ty != s.ty {
-            self.mismatch(&e, s.ty, Some(end), Some((s.span, format!("this has type {}", bt(s.ty)))));
+            self.mismatch(&e, s.ty, Some(end), Some((s.span, format!("this has type {}", self.bt(s.ty)))));
             ty = Ty::Err;
         }
         self.push_scope();

@@ -15,6 +15,7 @@ use lexer::{lex, Token};
 use std::process::Command;
 use source::SourceFile;
 use std::io::IsTerminal;
+use std::time::Instant;
 
 /// Como os diagnosticos sao impressos no stderr.
 #[derive(Clone, Copy)]
@@ -35,6 +36,7 @@ OPTIONS:
     --tokens       print the tokens to stdout
     --ast          print the syntax tree to stdout (no code generation)
     --check        check the program, but do not generate anything
+    -q, --quiet    do not print the `Compiling` / `Finished` lines
     --message-format=<fmt>
                    `human` (default) or `json`: one JSON object per line on
                    stderr for each diagnostic, for editors and tools
@@ -51,6 +53,7 @@ struct Args {
     check: bool,
     emit_c: bool,
     json: bool,
+    quiet: bool,
     out: Option<String>,
     path: String,
 }
@@ -60,11 +63,13 @@ fn parse_args() -> Result<Args, String> {
     let mut tokens = false;
     let (mut ast, mut check, mut emit_c) = (false, false, false);
     let mut json = false;
+    let mut quiet = false;
     let mut out: Option<String> = None;
     let mut path: Option<String> = None;
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
+            "-q" | "--quiet" => quiet = true,
             "--ast" => ast = true,
             "--check" => check = true,
             "--emit-c" => emit_c = true,
@@ -112,6 +117,7 @@ fn parse_args() -> Result<Args, String> {
             check,
             emit_c,
             json,
+            quiet,
             out,
             path,
         }),
@@ -203,12 +209,9 @@ fn find_cc() -> Option<String> {
     })
 }
 
-fn build(args: &Args, c_code: &str) -> i32 {
-    let Some(cc) = find_cc() else {
-        eprintln!("{}", NO_CC);
-        return 1;
-    };
-    let exe = match &args.out {
+/// Onde o executavel vai: `-o`, ou ao lado do codigo fonte.
+fn exe_path(args: &Args) -> String {
+    match &args.out {
         Some(o) => o.clone(),
         None => {
             // por padrao, ao lado do codigo fonte
@@ -227,7 +230,15 @@ fn build(args: &Args, c_code: &str) -> i32 {
                 _ => name,
             }
         }
+    }
+}
+
+fn build(args: &Args, c_code: &str) -> i32 {
+    let Some(cc) = find_cc() else {
+        eprintln!("{}", NO_CC);
+        return 1;
     };
+    let exe = exe_path(args);
     let dir = std::env::temp_dir().join(format!("nihonc-{}", std::process::id()));
     if let Err(e) = std::fs::create_dir_all(&dir) {
         eprintln!("error: cannot create a temporary folder: {}", e);
@@ -266,6 +277,16 @@ fn build(args: &Args, c_code: &str) -> i32 {
     }
 }
 
+/// `   Compiling x` / `    Finished x`, como o cargo: o verbo em verde e negrito.
+fn status_line(color: bool, verb: &str, rest: &str) -> String {
+    let padded = format!("{:>12}", verb);
+    if color {
+        format!("\x1b[1;32m{}\x1b[0m {}", padded, rest)
+    } else {
+        format!("{} {}", padded, rest)
+    }
+}
+
 fn run() -> i32 {
     let args = match parse_args() {
         Ok(a) => a,
@@ -298,6 +319,12 @@ fn run() -> i32 {
     } else {
         Style::Human { color }
     };
+    let status = !args.quiet && !args.json && !args.tokens && !args.ast && !args.emit_c;
+    let start = Instant::now();
+    if status {
+        let verb = if args.check { "Checking" } else { "Compiling" };
+        eprintln!("{}", status_line(color, verb, &args.path));
+    }
     let shown = 0;
     if handler.error_count() > 0 {
         return finish_errors(&handler, &file, style, shown);
@@ -324,14 +351,25 @@ fn run() -> i32 {
     print_new(&handler, &file, style, shown);
     summary_warnings(&handler, style);
 
+    let finished = |what: &str| {
+        if status {
+            let secs = start.elapsed().as_secs_f64();
+            eprintln!("{}", status_line(color, "Finished", &format!("{} in {:.2}s", what, secs)));
+        }
+    };
     if args.check {
+        finished("checking");
         return 0;
     }
     if args.emit_c {
         print!("{}", c_code);
         return 0;
     }
-    build(&args, &c_code)
+    let code = build(&args, &c_code);
+    if code == 0 {
+        finished(&format!("`{}`", exe_path(&args)));
+    }
+    code
 }
 
 fn main() {
