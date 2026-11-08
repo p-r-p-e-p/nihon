@@ -1,0 +1,147 @@
+error[E0401]: cannot assign to `自分.x`, which is behind a `&` reference
+ --> e0626_structs.nihon:9:18
+  |
+9 |     関数 見る(&自分) { 自分.x = 3; }
+  |                        ^^^^^^ this reference does not allow changes
+  |
+  = help: take it as `&可変` (kahen, "mutable") instead of `&`
+
+error[E0401]: cannot assign to `p.x`, which is behind a `&` reference
+  --> e0626_structs.nihon:12:15
+   |
+12 | 関数 f(p: &点) { p.x = 1; }
+   |                  ^^^ this reference does not allow changes
+   |
+   = help: take it as `&可変` (kahen, "mutable") instead of `&`
+
+error[E0623]: missing field in the initializer of `点`: `y`
+  --> e0626_structs.nihon:15:12
+   |
+15 |     束縛 p = 点 { x: 1 };
+   |              ^^^^^^^^^^^ missing `y`
+
+error[E0624]: struct `点` has no field named `z`
+  --> e0626_structs.nihon:16:28
+   |
+16 |     束縛 q = 点 { x: 1, y: 2, z: 3 };
+   |                               ^ unknown field
+   |
+help: a field with a similar name exists
+   |
+16 |     束縛 q = 点 { x: 1, y: 2, x: 3 };
+   |                               ~
+
+error[E0401]: cannot borrow `r` as mutable, as `r` is not declared as mutable
+  --> e0626_structs.nihon:18:5
+   |
+17 |     束縛 r = 点::新();
+   |          - `r` is declared here
+18 |     r.動く();
+   |     ^ not mutable
+   |
+help: consider making this binding mutable with `可変` (kahen, "mutable")
+   |
+17 |     束縛 可変 r = 点::新();
+   |          +++++
+
+error[E0401]: cannot assign to `s.x`, as `s` is not declared as mutable
+  --> e0626_structs.nihon:20:5
+   |
+19 |     束縛 s = 点 { x: 1, y: 2 };
+   |          - `s` is declared here
+20 |     s.x = 5;
+   |     ^^^ not mutable
+   |
+help: consider making this binding mutable with `可変` (kahen, "mutable")
+   |
+19 |     束縛 可変 s = 点 { x: 1, y: 2 };
+   |          +++++
+
+error[E0629]: `点` cannot be shown with `{}`
+  --> e0626_structs.nihon:21:15
+   |
+21 |     表示!("{}", s);
+   |                 ^ structs have no text form yet
+   |
+   = help: show the fields one by one, for example `表示!("{}", p.x)` (hyouji!)
+
+error[E0626]: no field `w` on struct `点`
+  --> e0626_structs.nihon:22:17
+   |
+22 |     表示!("{}", s.w);
+   |                   ^ unknown field
+   |
+   = note: available fields: `x`, `y`
+help: a field with a similar name exists
+   |
+22 |     表示!("{}", s.x);
+   |                   ~
+
+error[E0304]: cannot apply `==` to `点` and `点`
+  --> e0626_structs.nihon:23:14
+   |
+23 |     束縛 t = s == s;
+   |              - ^^ - `点`
+   |              | |
+   |              | no implementation for `点 == 点`
+   |              `点`
+   |
+   = note: `点` is a struct defined in this program
+   = help: compare the fields one by one, for example `a.x == b.x`
+
+error[E0631]: `新` is an associated function, not a method
+  --> e0626_structs.nihon:24:7
+   |
+ 7 |     関数 新() -> 点 { 点 { x: 0, y: 0 } }
+   |          -- defined here
+...
+24 |     s.新();
+   |       ^^ it has no `自分` parameter
+   |
+   = help: call it as `点::新(...)`
+
+error[E0202]: no function named `無し` found for struct `点`
+  --> e0626_structs.nihon:25:8
+   |
+25 |     点::無し();
+   |         ^^^^ not found
+
+error[E0301]: mismatched types
+  --> e0626_structs.nihon:26:7
+   |
+12 | 関数 f(p: &点) { p.x = 1; }
+   |           --- expected due to the type of this parameter
+...
+26 |     f(s);
+   |       ^ expected `&点`, found `点`
+   |
+   = note: `&点` is a reference to a `点`: it points to the original value
+   = note: `点` is a struct defined in this program
+help: borrow it instead of passing it by value
+   |
+26 |     f(&s);
+   |       +
+
+error[E0628]: invalid left-hand side of assignment
+  --> e0626_structs.nihon:27:5
+   |
+27 |     1 = 2;
+   |     ^ cannot assign to this expression
+   |
+   = note: only variables and fields (`p.x`) can be assigned to
+
+error[E0622]: cannot take a reference to `整32` for now
+  --> e0626_structs.nihon:28:12
+   |
+28 |     束縛 u = &5;
+   |              ^^ references only point to structs for now
+
+error[E0201]: cannot find value `自分` in this scope
+  --> e0626_structs.nihon:29:5
+   |
+29 |     自分;
+   |     ^^^^ not found in this scope
+   |
+   = note: `自分` (jibun, "self") only exists inside a method that takes it as its first parameter
+
+error: aborting due to 15 previous errors

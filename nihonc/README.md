@@ -2,7 +2,7 @@
 
 The compiler for **Nihon** (`.nihon`), a Rust-style language written in Japanese.
 
-Status: stage 0 plus the first part of stage 1 (lexer, parser, checks, C code generator, and the text type `文字列`). No external dependencies.
+Status: stage 0 plus the first part of stage 1 (lexer, parser, checks, C code generator, the text type `文字列`, and structs with methods). No external dependencies.
 
 ## How it works
 
@@ -78,6 +78,10 @@ Exit codes: `0` success, `1` the program has errors, `2` wrong command line.
 | Macros `表示!` `出力!` `異常終了!` `表明!` `整形!` `未実装!` | `{}` placeholders and `{{` `}}` |
 | Types `整32` `非負32` `実64` `真偽` `文字` `文字列` | see below |
 | Text: `+`, `+=`, `==`, `<`, `.長さ()`, `.バイト数()` | `長さ` (nagasa) counts characters, `バイト数` (baitosuu) counts bytes |
+| Structs: `構造体 点 { x: 整32 }` (kouzoutai, `struct`), literals `点 { x: 1 }`, fields `p.x`, `p.x = 5` | assigning needs `可変` (kahen, `mut`) on the variable |
+| Methods: `実装 点 { ... }` (jissou, `impl`), `点::新()` (associated function), `p.動く()` (method) | first parameter `自分` (jibun, `self`), `&自分`, `&可変 自分`; `自身` (jishin, `Self`) is the struct's own type |
+| References: `&p`, `&可変 p`, types `&点` and `&可変 点` | syntax and mutability are checked; there is no borrow checker yet |
+| `公開` (koukai, `pub`) | accepted and ignored for now: everything is public |
 
 The entry point is a function named `主` (shu, "main") or `shu`. Neither gets a warning.
 
@@ -99,4 +103,8 @@ The entry point is a function named `主` (shu, "main") or `shu`. Neither gets a
 - Constants are computed while compiling (numbers, `真偽`, `文字`, `文字列`, other constants, operators, `として`, `もし` / `他`). A calculation that overflows or divides by zero is error E0208. Function calls and macros are not allowed in constants.
 - `真偽` values print as `真 (shin)` / `偽 (gi)`.
 - Text built while the program runs (with `整形!` or `+`) is never freed, because there is no owned text type yet.
-- Not supported yet: `構造体`, `列挙型`, `照合`, `任意`, `結果`, arrays and tuples. They are reserved words, and using them gives a clear error.
+- Structs behave like plain values: passing one copies it, and there is no move checking yet.
+- References point only to structs, and can be used only as parameters and local variables. A function cannot return a reference and a field cannot hold one (error E0622), because there is no borrow checker to keep them safe.
+- Structs cannot be printed with `表示!` yet (error E0629) and cannot be compared with `==`: compare the fields one by one. Constants cannot have a struct type.
+- A struct literal is not allowed directly in the header of `もし`, `間` or `各` (like in Rust); wrap it in parentheses.
+- Not supported yet: `列挙型`, `照合`, `任意`, `結果`, arrays and tuples. They are reserved words, and using them gives a clear error.

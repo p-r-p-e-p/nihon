@@ -2,9 +2,9 @@ error[E0108]: expected item, found `束縛`
  --> e0108_toplevel.nihon:1:1
   |
 1 | 束縛 x = 1;
-  | ^^^^ expected `関数` or `定数`
+  | ^^^^ expected `関数`, `定数`, `構造体` or `実装`
   |
-  = note: only functions `関数` (kansuu, "function") and constants `定数` (teisuu, "constant") may appear at the top level
+  = note: only functions `関数` (kansuu, "function"), constants `定数` (teisuu, "constant"), structs `構造体` (kouzoutai, "struct") and `実装` (jissou, "implementation") blocks may appear at the top level
   = note: `束縛` is a reserved keyword (sokubaku, "let")
 
 error: aborting due to 1 previous error

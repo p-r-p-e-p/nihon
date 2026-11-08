@@ -26,13 +26,13 @@
 
 The compiler, `nihonc`, is strict like `rustc`: it refuses sloppy code and explains how to fix it. Messages are in English, with the Japanese words always shown next to their romaji reading and meaning. `nihonc` turns a program into C and uses the C compiler of your system, so there is no virtual machine and the result is a native executable.
 
-The project is in early development. The compiler is written in Rust, with no external dependencies. It currently includes a lexer, parser, diagnostics, name/type/mutability checks, a C code generator, and the text type. The grammar and language design are still evolving; the compiler does not yet implement the full planned language.
+The project is in early development. The compiler is written in Rust, with no external dependencies. It currently includes a lexer, parser, diagnostics, name/type/mutability checks, a C code generator, the text type, and structs with methods. The grammar and language design are still evolving; the compiler does not yet implement the full planned language.
 
 ## Current status
 
 - **Compiler:** stage 0 plus the first part of stage 1. It parses programs, checks names, types and mutability, and generates C.
-- **Supported subset:** functions, constants, bindings, control flow, the types `整32`, `非負32`, `実64`, `真偽`, `文字` and `文字列` (text), and the macros `表示!`, `出力!`, `異常終了!`, `表明!`, `整形!` and `未実装!`. See [`nihonc/README.md`](nihonc/README.md) for the details and current limitations.
-- **Not yet supported:** structs, enums, `照合` (pattern matching), `任意` and `結果` (optional values and results), arrays, and tuples. These are the rest of stage 1.
+- **Supported subset:** functions, constants, bindings, control flow, structs with methods (`構造体`, `実装`), references `&` and `&可変` (without a borrow checker yet), the types `整32`, `非負32`, `実64`, `真偽`, `文字` and `文字列` (text), and the macros `表示!`, `出力!`, `異常終了!`, `表明!`, `整形!` and `未実装!`. See [`nihonc/README.md`](nihonc/README.md) for the details and current limitations.
+- **Not yet supported:** enums, `照合` (pattern matching), `任意` and `結果` (optional values and results), arrays, and tuples. These are the rest of stage 1.
 - **Editor support:** `--message-format=json` already prints diagnostics for editors; the VS Code plugin is planned.
 - **Syntax and grammar:** experimental and subject to change.
 - **Long-term goal:** grow the compiler stage by stage, and finish with a self-hosted compiler written in Nihon.
@@ -45,7 +45,7 @@ Keywords can be written in Japanese or in ASCII romaji. Romaji spellings are pra
 
 ## Example
 
-This example illustrates the language's direction. It uses structs and methods, which are planned but not supported yet. The comments give the romaji and the meaning of each Japanese word.
+This example uses structs and methods, which the compiler supports now. The comments give the romaji and the meaning of each Japanese word.
 
 ```nihon
 構造体 点 {                       // kouzoutai ten = struct Point
@@ -81,7 +81,7 @@ A program that works with the current compiler:
 
 ### Romaji spelling
 
-The structs example again, using ASCII spellings. Long vowels are written by doubling the vowel, as in `kansuu` and `koukai`.
+The structs example again, using ASCII spellings (compile it with `--romaji`). Long vowels are written by doubling the vowel, as in `kansuu` and `koukai`.
 
 ```nihon
 kouzoutai ten {
@@ -121,8 +121,11 @@ kansuu shu() {
 | `as` | として | `toshite` | Conversion |
 | `true` / `false` | 真 / 偽 | `shin` / `gi` | True / false |
 | `match` | 照合 | `shougou` | Pattern matching (planned) |
-| `struct` | 構造体 | `kouzoutai` | Structure (planned) |
-| `impl` | 実装 | `jissou` | Implementation (planned) |
+| `struct` | 構造体 | `kouzoutai` | Structure |
+| `impl` | 実装 | `jissou` | Implementation |
+| `self` / `Self` | 自分 / 自身 | `jibun` / `jishin` | Oneself / the type itself |
+| `pub` | 公開 | `koukai` | Public (accepted, ignored for now) |
+| `&` / `&mut` | & / &可変 | `&` / `&kahen` | Reference / mutable reference |
 | `println!` | 表示! | `hyouji!` | Display output with a new line |
 | `print!` | 出力! | `shutsuryoku!` | Output without a new line |
 
@@ -168,7 +171,7 @@ For compiler-specific details, supported features, limitations, and tests, see [
 - [x] Name, type, and mutability checks, and constants evaluated at compile time
 - [x] Text type `文字列`, with `整形!`
 - [x] `--message-format=json` for editors
-- [ ] Structs and methods (`構造体`, `実装`)
+- [x] Structs and methods (`構造体`, `実装`), references `&` and `&可変`
 - [ ] Enums, `照合`, `任意` and `結果`
 - [ ] Arrays and tuples
 - [ ] Editor support: TextMate grammar and VS Code plugin

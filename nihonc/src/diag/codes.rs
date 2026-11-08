@@ -107,3 +107,23 @@ pub const W0003: &str = "W0003";
 pub const W0004: &str = "W0004";
 /// Katakana de meia largura em nome.
 pub const W0005: &str = "W0005";
+
+// ---- Structs, metodos e referencias (E062x) ----
+/// Struct que contem a si mesma (tamanho infinito).
+pub const E0620: &str = "E0620";
+/// Referencia onde ainda nao e permitida (campo, retorno, referencia de referencia...).
+pub const E0622: &str = "E0622";
+/// Faltam campos ao criar uma struct.
+pub const E0623: &str = "E0623";
+/// Campo que a struct nao tem, ao criar uma struct.
+pub const E0624: &str = "E0624";
+/// Campo dado duas vezes ao criar uma struct.
+pub const E0625: &str = "E0625";
+/// Acesso a um campo que nao existe (ou em algo que nao e struct).
+pub const E0626: &str = "E0626";
+/// Lado esquerdo de uma atribuicao que nao pode receber valor.
+pub const E0628: &str = "E0628";
+/// Struct usada em `表示!` / `整形!`, que ainda nao sabem mostrar structs.
+pub const E0629: &str = "E0629";
+/// Funcao sem `自分` chamada como metodo.
+pub const E0631: &str = "E0631";

@@ -11,6 +11,48 @@ pub struct Program {
 pub enum Item {
     Fn(FnItem),
     Const(ConstItem),
+    Struct(StructItem),
+    Impl(ImplItem),
+}
+
+#[derive(Debug, Clone)]
+pub struct Field {
+    pub name: Ident,
+    pub ty: Type,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct StructItem {
+    pub name: Ident,
+    pub fields: Vec<Field>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct ImplItem {
+    pub ty: Ident,
+    pub fns: Vec<FnItem>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelfKind {
+    /// `自分`
+    Value,
+    /// `&自分`
+    Ref,
+    /// `&可変 自分`
+    RefMut,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SelfParam {
+    pub kind: SelfKind,
+    /// `可変 自分`
+    pub mutable: bool,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -19,11 +61,13 @@ pub struct Ident {
     pub span: Span,
 }
 
-/// Tipo do stage 0: so nomes simples (`整32`, `実64`...).
+/// Um tipo: um nome (`整32`, `点`, `自身`), opcionalmente atras de `&` / `&可変`.
 #[derive(Debug, Clone)]
 pub struct Type {
     pub name: String,
     pub span: Span,
+    /// `Some(false)` = `&T`, `Some(true)` = `&可変 T`.
+    pub reference: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +80,7 @@ pub struct Param {
 #[allow(dead_code)]
 pub struct FnItem {
     pub name: Ident,
+    pub self_param: Option<SelfParam>,
     pub params: Vec<Param>,
     pub ret: Option<Type>,
     pub body: Block,
@@ -74,7 +119,7 @@ pub enum StmtKind {
         init: Expr,
     },
     Assign {
-        target: Ident,
+        target: Expr,
         op: AssignOp,
         value: Expr,
     },
@@ -154,6 +199,24 @@ pub enum ExprKind {
     Call {
         callee: Box<Expr>,
         args: Vec<Expr>,
+    },
+    Field {
+        base: Box<Expr>,
+        name: Ident,
+    },
+    /// `点::原点`
+    AssocPath {
+        ty: Ident,
+        name: Ident,
+    },
+    StructLit {
+        name: Ident,
+        fields: Vec<(Ident, Expr)>,
+    },
+    /// `&x` / `&可変 x`
+    Ref {
+        mutable: bool,
+        expr: Box<Expr>,
     },
     MethodCall {
         recv: Box<Expr>,

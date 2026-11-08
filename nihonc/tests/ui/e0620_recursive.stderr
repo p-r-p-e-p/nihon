@@ -1,0 +1,43 @@
+error[E0622]: struct fields cannot be references yet
+ --> e0620_recursive.nihon:9:13
+  |
+9 | 構造体 参照 { r: &木 }
+  |                  ^^^ this field type is a reference
+  |
+  = note: without a borrow checker, a stored reference could outlive the value it points to
+  = help: store the struct by value instead
+
+error[E0620]: struct `木` contains itself, so it would have infinite size
+ --> e0620_recursive.nihon:1:5
+  |
+1 | 構造体 木 {
+  |        ^^ recursive struct
+  |
+  = note: a struct cannot hold a copy of itself, directly or through other structs
+  = help: references cannot be stored in fields yet, so a recursive struct is not possible for now
+
+error[E0620]: struct `甲` contains itself, so it would have infinite size
+ --> e0620_recursive.nihon:6:5
+  |
+6 | 構造体 甲 { 乙: 乙 }
+  |        ^^ recursive struct
+  |
+  = note: a struct cannot hold a copy of itself, directly or through other structs
+  = help: references cannot be stored in fields yet, so a recursive struct is not possible for now
+
+error[E0622]: functions cannot return references yet
+  --> e0620_recursive.nihon:11:17
+   |
+11 | 関数 返す(a: &木) -> &木 { a }
+   |                      ^^^ this return type is a reference
+   |
+   = note: without a borrow checker, a returned reference could point to a value that no longer exists
+   = help: return the struct by value instead
+
+error[E0201]: cannot find struct `無い` in this scope
+  --> e0620_recursive.nihon:13:4
+   |
+13 | 実装 無い { }
+   |      ^^^^ not found in this scope
+
+error: aborting due to 5 previous errors
