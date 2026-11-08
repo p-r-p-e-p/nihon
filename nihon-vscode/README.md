@@ -15,18 +15,19 @@ Language support for **Nihon**, a Rust-style programming language written in kan
 
 ## Features
 
-- **Syntax highlighting** for kanji, kana and romaji keywords, types (`整32`/`sei32`…), macros (`表示!`), numbers, strings, characters and nested block comments.
+- **Syntax highlighting** for kanji, kana and romaji keywords, types (`整32`/`sei32`, `文字列`/`mojiretsu`…), methods (`texto.長さ()`), macros (`表示!`), numbers, strings, characters and nested block comments.
 - **Full-width character detection:** zenkaku punctuation, digits and letters (`；`, `１`, `（`…) are underlined in red, mirroring compiler error E0002. Half-width katakana is flagged like warning W0005.
 - **Live diagnostics:** errors and warnings from `nihonc` appear as you type (after a short pause), with error codes, notes and help text.
 - **Quick fixes:** press `Ctrl+.` on a diagnostic to apply the compiler's own suggestion, for example:
   - `１；` → `1;` (E0002), `もしx` → `もし x` (E0003)
   - `kansuu` → `関数` (W0001), `ﾊﾝｶｸ` → `ハンカク` (W0005)
   - missing `;` (E0102) or `中` in a `各` loop (E0106)
+  - `mojiretsu` → `文字列`, `.nagasa()` → `.長さ()` (W0001 on types and methods)
   - remove an unneeded `可変` (W0004)
   - "did you mean" suggestions for misspelled names, types and macros (offered, never applied automatically)
 - **Fix all safe issues:** applies every automatic fix in the file at once.
-- **Romaji completion:** type `kansuu` and pick `関数` from the list. Types and macros work the same way (`hyouji` → `表示!`).
-- **Hover** shows the romaji spelling and English meaning of every keyword, type and macro.
+- **Romaji completion:** type `kansuu` and pick `関数` from the list. Types, macros and methods work the same way (`hyouji` → `表示!`, and after a dot `nagasa` → `長さ()`).
+- **Hover** shows the romaji spelling and English meaning of every keyword, type, macro and method.
 - **Snippets** with Japanese and romaji prefixes (`main`, `kansuu`, `moshi`, `kaku`, `teisuu`…).
 - **Show tokens:** runs `nihonc --tokens` and opens the output beside the editor.
 

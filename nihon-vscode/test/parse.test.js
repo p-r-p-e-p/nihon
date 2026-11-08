@@ -35,6 +35,14 @@ d = parseJson(fx('c.json.txt'));
 assert.strictEqual(d[0].code, 'W0004');
 assert.strictEqual(d[0].fixes[0].replacement, '');              // remover
 
+d = parseJson(fx('m.json.txt'));
+assert.deepStrictEqual(d.map((x) => x.code), ['W0001', 'E0613', 'W0001']);
+assert.strictEqual(d[0].fixes[0].replacement, '長さ');           // método em romaji -> forma canônica
+assert.strictEqual(d[0].fixes[0].safe, true);
+assert.strictEqual(d[1].fixes[0].replacement, '長さ');           // método parecido: só dica
+assert.strictEqual(d[1].fixes[0].safe, false);
+assert.strictEqual(d[2].fixes[0].replacement, '文字列');         // tipo em romaji
+
 // linhas que não são JSON e sem posição não quebram
 d = parseJson('lixo\n{"level":"error","code":"E0204","message":"no main","spans":[],"notes":[],"helps":[]}\n{quebrado');
 assert.strictEqual(d.length, 1);
