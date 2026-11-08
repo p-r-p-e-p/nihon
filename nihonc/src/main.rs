@@ -1,4 +1,4 @@
-//! nihonc: compilador da linguagem Nihon (stage 0, fatia 1: lexer + erros).
+//! nihonc: compilador da linguagem Nihon (stage 0, fatia 2: lexer, parser e gerador de C).
 
 mod ast;
 mod codegen_c;
@@ -8,12 +8,20 @@ mod parser;
 mod source;
 mod width_table;
 
+use diag::json::to_json;
 use diag::render::render;
 use diag::{Config, Handler};
 use lexer::{lex, Token};
 use std::process::Command;
 use source::SourceFile;
 use std::io::IsTerminal;
+
+/// Como os diagnosticos sao impressos no stderr.
+#[derive(Clone, Copy)]
+enum Style {
+    Human { color: bool },
+    Json,
+}
 
 const USAGE: &str = "\
 nihonc - compiler for the Nihon language (stage 0, slice 2: parser + C backend)
@@ -27,6 +35,9 @@ OPTIONS:
     --tokens       print the tokens to stdout
     --ast          print the syntax tree to stdout (no code generation)
     --check        check the program, but do not generate anything
+    --message-format=<fmt>
+                   `human` (default) or `json`: one JSON object per line on
+                   stderr for each diagnostic, for editors and tools
     --emit-c       print the generated C to stdout instead of building
     -o <file>      name of the executable (default: the file name without `.nihon`)
     -h, --help     show this help
@@ -39,6 +50,7 @@ struct Args {
     ast: bool,
     check: bool,
     emit_c: bool,
+    json: bool,
     out: Option<String>,
     path: String,
 }
@@ -47,6 +59,7 @@ fn parse_args() -> Result<Args, String> {
     let mut config = Config::default();
     let mut tokens = false;
     let (mut ast, mut check, mut emit_c) = (false, false, false);
+    let mut json = false;
     let mut out: Option<String> = None;
     let mut path: Option<String> = None;
     let mut it = std::env::args().skip(1);
@@ -70,6 +83,18 @@ fn parse_args() -> Result<Args, String> {
                 println!("nihonc {}", env!("CARGO_PKG_VERSION"));
                 std::process::exit(0);
             }
+            s if s.starts_with("--message-format=") => {
+                match &s["--message-format=".len()..] {
+                    "json" => json = true,
+                    "human" => json = false,
+                    other => {
+                        return Err(format!(
+                            "unknown message format `{}` (use `human` or `json`)",
+                            other
+                        ))
+                    }
+                }
+            }
             s if s.starts_with('-') => return Err(format!("unknown option `{}`", s)),
             s => {
                 if path.is_some() {
@@ -86,6 +111,7 @@ fn parse_args() -> Result<Args, String> {
             ast,
             check,
             emit_c,
+            json,
             out,
             path,
         }),
@@ -111,15 +137,22 @@ fn dump_tokens(file: &SourceFile, tokens: &[Token]) {
 }
 
 /// Mostra os diagnosticos ainda nao mostrados; devolve quantos ja foram.
-fn print_new(handler: &Handler, file: &SourceFile, color: bool, shown: usize) -> usize {
+fn print_new(handler: &Handler, file: &SourceFile, style: Style, shown: usize) -> usize {
     for d in &handler.diags[shown..] {
-        eprintln!("{}", render(d, file, color));
+        match style {
+            Style::Human { color } => eprintln!("{}", render(d, file, color)),
+            Style::Json => eprintln!("{}", to_json(d, file)),
+        }
     }
     handler.diags.len()
 }
 
-fn finish_errors(handler: &Handler, file: &SourceFile, color: bool, shown: usize) -> i32 {
-    print_new(handler, file, color, shown);
+fn finish_errors(handler: &Handler, file: &SourceFile, style: Style, shown: usize) -> i32 {
+    print_new(handler, file, style, shown);
+    if let Style::Json = style {
+        // em JSON so os diagnosticos saem, sem a linha de resumo
+        return 1;
+    }
     let errors = handler.error_count();
     let warnings = handler.warning_count();
     let mut line = format!(
@@ -133,7 +166,10 @@ fn finish_errors(handler: &Handler, file: &SourceFile, color: bool, shown: usize
     1
 }
 
-fn summary_warnings(handler: &Handler) {
+fn summary_warnings(handler: &Handler, style: Style) {
+    if let Style::Json = style {
+        return;
+    }
     let w = handler.warning_count();
     if w > 0 {
         eprintln!("warning: {} emitted", plural(w, "warning", "warnings"));
@@ -251,11 +287,16 @@ fn run() -> i32 {
     let tokens = lex(&file, &mut handler);
 
     let color = std::io::stderr().is_terminal() && std::env::var_os("NO_COLOR").is_none();
+    let style = if args.json {
+        Style::Json
+    } else {
+        Style::Human { color }
+    };
     let shown = 0;
     if handler.error_count() > 0 {
-        return finish_errors(&handler, &file, color, shown);
+        return finish_errors(&handler, &file, style, shown);
     }
-    let shown = print_new(&handler, &file, color, shown);
+    let shown = print_new(&handler, &file, style, shown);
 
     if args.tokens {
         dump_tokens(&file, &tokens);
@@ -263,19 +304,19 @@ fn run() -> i32 {
     }
 
     let Some(program) = parser::parse(&file, &tokens, &mut handler) else {
-        return finish_errors(&handler, &file, color, shown);
+        return finish_errors(&handler, &file, style, shown);
     };
     if args.ast {
-        print_new(&handler, &file, color, shown);
+        print_new(&handler, &file, style, shown);
         println!("{:#?}", program);
         return 0;
     }
 
     let Some(c_code) = codegen_c::generate(&file, &program, &mut handler) else {
-        return finish_errors(&handler, &file, color, shown);
+        return finish_errors(&handler, &file, style, shown);
     };
-    print_new(&handler, &file, color, shown);
-    summary_warnings(&handler);
+    print_new(&handler, &file, style, shown);
+    summary_warnings(&handler, style);
 
     if args.check {
         return 0;

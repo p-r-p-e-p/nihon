@@ -2,6 +2,7 @@
 //! e avisos para ca, e o `render` desenha tudo no estilo do rustc.
 
 pub mod codes;
+pub mod json;
 pub mod render;
 
 use crate::source::Span;
@@ -19,14 +20,13 @@ pub struct Label {
     pub primary: bool,
 }
 
-/// Troca de texto sugerida. `safe` diz se um futuro `nihonc fix` pode
-/// aplicar sozinho (true) ou se e so uma dica (false).
+/// Troca de texto sugerida. `safe` diz se pode ser aplicada sozinha, sem
+/// perguntar (true) ou se e so uma dica (false). O plugin de VS Code le isso
+/// pelo `--message-format=json` para oferecer quick fixes.
 #[derive(Debug, Clone)]
 pub struct Edit {
     pub span: Span,
     pub replacement: String,
-    /// Ainda sem leitor: o `nihonc fix` (fatia futura) vai usar.
-    #[allow(dead_code)]
     pub safe: bool,
 }
 
