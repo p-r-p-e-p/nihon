@@ -1,10 +1,10 @@
 {
   "name": "nihon-lang",
   "displayName": "Nihon",
-  "description": "Language support for Nihon, the Rust-style language written in kanji and kana: syntax highlighting, snippets, romaji completion, keyword hover and nihonc diagnostics.",
-  "version": "0.1.0",
+  "description": "Language support for Nihon, the Rust-style language written in kanji and kana: syntax highlighting, snippets, romaji completion, keyword hover, live nihonc diagnostics and quick fixes.",
+  "version": "0.2.0",
   "publisher": "prpep",
-  "license": "MIT OR Apache-2.0",
+  "license": "MIT or APACHE 2.0",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -63,6 +63,10 @@
         "title": "Nihon: Check file"
       },
       {
+        "command": "nihon.fixAll",
+        "title": "Nihon: Fix all safe issues"
+      },
+      {
         "command": "nihon.showTokens",
         "title": "Nihon: Show tokens"
       }
@@ -78,7 +82,7 @@
         "nihon.diagnostics.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Run nihonc when a .nihon file is opened or saved and show its errors and warnings in the editor."
+          "description": "Run nihonc on .nihon files and show its errors and warnings in the editor."
         },
         "nihon.romaji": {
           "type": "boolean",
@@ -89,6 +93,19 @@
           "type": "boolean",
           "default": false,
           "description": "Pass --strict to the compiler (every warning becomes an error)."
+        },
+        "nihon.diagnostics.run": {
+          "type": "string",
+          "enum": [
+            "onType",
+            "onSave"
+          ],
+          "default": "onType",
+          "enumDescriptions": [
+            "Check while you type (after a short pause) and when a file is opened or saved.",
+            "Check only when a file is opened or saved."
+          ],
+          "description": "When to run the compiler to refresh diagnostics."
         }
       }
     }

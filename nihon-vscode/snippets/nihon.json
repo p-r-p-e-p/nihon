@@ -114,69 +114,6 @@
     ],
     "description": "for each"
   },
-  "照合 (shougou)": {
-    "prefix": [
-      "shougou",
-      "照合"
-    ],
-    "body": [
-      "照合 ${1:値} {",
-      "\t${2:パターン} => ${3:式},",
-      "\t$0",
-      "}"
-    ],
-    "description": "match"
-  },
-  "構造体 (kouzoutai)": {
-    "prefix": [
-      "kouzoutai",
-      "構造体"
-    ],
-    "body": [
-      "構造体 ${1:名前} {",
-      "\t${2:欄}: ${3:整32},",
-      "\t$0",
-      "}"
-    ],
-    "description": "struct"
-  },
-  "列挙型 (rekkyogata)": {
-    "prefix": [
-      "rekkyogata",
-      "列挙型"
-    ],
-    "body": [
-      "列挙型 ${1:名前} {",
-      "\t${2:候補},",
-      "\t$0",
-      "}"
-    ],
-    "description": "enum"
-  },
-  "実装 (jissou)": {
-    "prefix": [
-      "jissou",
-      "実装"
-    ],
-    "body": [
-      "実装 ${1:名前} {",
-      "\t$0",
-      "}"
-    ],
-    "description": "impl"
-  },
-  "特性 (tokusei)": {
-    "prefix": [
-      "tokusei",
-      "特性"
-    ],
-    "body": [
-      "特性 ${1:名前} {",
-      "\t$0",
-      "}"
-    ],
-    "description": "trait"
-  },
   "表示! (hyouji)": {
     "prefix": [
       "hyouji",
@@ -184,5 +121,13 @@
     ],
     "body": "表示!(\"${1:テキスト}\");",
     "description": "println!"
+  },
+  "定数 (teisuu)": {
+    "prefix": [
+      "teisuu",
+      "定数"
+    ],
+    "body": "定数 ${1:名前}: ${2:整32} = ${3:値};",
+    "description": "constant"
   }
 }

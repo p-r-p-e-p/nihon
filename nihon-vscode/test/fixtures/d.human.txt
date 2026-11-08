@@ -1,0 +1,24 @@
+error[E0106]: expected `中` in `各` loop, found `0`
+ --> d.nihon:3:9
+  |
+3 |     各 i 0..3 { 表示!("{}", i); }
+  |          ^ expected `中`
+  |
+  = note: `中` is read naka ("inside"): write `各 i 中 1..10 { ... }`
+help: add `中` after the loop variable
+  |
+3 |     各 i 中 0..3 { 表示!("{}", i); }
+  |         +++
+
+error[E0102]: expected `;`, found `表示!`
+ --> d.nihon:4:13
+  |
+4 |     束縛 q = 5
+  |               ^ expected `;`
+  |
+help: add `;` here
+  |
+4 |     束縛 q = 5;
+  |               +
+
+error: aborting due to 2 previous errors
