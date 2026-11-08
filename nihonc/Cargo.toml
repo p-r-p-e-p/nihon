@@ -2,7 +2,7 @@
 name = "nihonc"
 version = "0.0.1"
 edition = "2021"
-description = "Compilador da linguagem Nihon (stage 0)"
+description = "The Nihon language compiler (stage 0)"
 
 # Zero dependencias externas, de proposito (veja o plano do projeto).
 [dependencies]
