@@ -1,0 +1,39 @@
+error[E0105]: expected expression, found `;`
+ --> e0105_syntax.nihon:2:12
+  |
+2 |     束縛 a = ;
+  |              ^ expected expression
+
+error[E0102]: expected `;`, found `束縛`
+ --> e0105_syntax.nihon:3:13
+  |
+3 |     束縛 b = 2
+  |               ^ expected `;`
+  |
+  = note: `束縛` is a reserved keyword (sokubaku, "let")
+help: add `;` here
+  |
+3 |     束縛 b = 2;
+  |               +
+
+error[E0107]: `他` without a preceding `もし`
+ --> e0105_syntax.nihon:5:5
+  |
+5 |     他 { }
+  |     ^^ no `もし` (moshi, "if") before this
+  |
+  = note: `他` (hoka, "else") must directly follow the `}` of a `もし` block
+
+error[E0106]: expected `中` in `各` loop, found `0`
+ --> e0105_syntax.nihon:6:9
+  |
+6 |     各 i 0..3 { }
+  |          ^ expected `中`
+  |
+  = note: `中` is read naka ("inside"): write `各 i 中 1..10 { ... }`
+help: add `中` after the loop variable
+  |
+6 |     各 i 中 0..3 { }
+  |         +++
+
+error: aborting due to 4 previous errors

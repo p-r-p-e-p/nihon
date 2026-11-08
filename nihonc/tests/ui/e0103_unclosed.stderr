@@ -1,0 +1,9 @@
+error[E0103]: mismatched closing delimiter: `}`
+ --> e0103_unclosed.nihon:3:1
+  |
+2 |     表示!("oi";
+  |          - unclosed delimiter
+3 | }
+  | ^ mismatched closing delimiter
+
+error: aborting due to 1 previous error
