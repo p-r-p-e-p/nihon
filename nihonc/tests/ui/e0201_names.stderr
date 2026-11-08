@@ -1,0 +1,44 @@
+error[E0203]: the name `合計` is defined multiple times
+ --> e0201_names.nihon:5:4
+  |
+1 | 関数 合計(a: 整32, b: 整32) -> 整32 {
+  |      ---- first definition
+...
+5 | 関数 合計(a: 整32) -> 整32 {
+  |      ^^^^ defined again here
+
+error[E0201]: cannot find value `goukel` in this scope
+  --> e0201_names.nihon:11:15
+   |
+11 |     表示!("{}", goukel);
+   |                 ^^^^^^ not found in this scope
+   |
+help: a value with a similar name exists
+   |
+11 |     表示!("{}", goukei);
+   |                 ~~~~~~
+
+error[E0202]: cannot find function `合計あ` in this scope
+  --> e0201_names.nihon:12:15
+   |
+12 |     表示!("{}", 合計あ(1, 2));
+   |                 ^^^^^^ not found in this scope
+   |
+help: a function with a similar name exists
+   |
+12 |     表示!("{}", 合計(1, 2));
+   |                 ~~~~
+
+error[E0201]: cannot find type `整3` in this scope
+  --> e0201_names.nihon:13:11
+   |
+13 |     束縛 x: 整3 = 1;
+   |             ^^^ not found in this scope
+   |
+   = note: available types: `整32` (sei32), `非負32` (hifu32), `実64` (jitsu64), `真偽` (shingi), `文字` (moji), `文字列` (mojiretsu)
+help: a type with a similar name exists
+   |
+13 |     束縛 x: 整32 = 1;
+   |             ~~~~
+
+error: aborting due to 4 previous errors

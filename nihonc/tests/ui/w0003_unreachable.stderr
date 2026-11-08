@@ -1,0 +1,9 @@
+warning[W0003]: unreachable statement
+ --> w0003_unreachable.nihon:3:5
+  |
+2 |     返却;
+  |     ----- any code following this is unreachable
+3 |     表示!("nunca");
+  |     ^^^^^^^^^^^^^^^ unreachable statement
+
+warning: 1 warning emitted

@@ -1,0 +1,17 @@
+error[E0208]: evaluation of constant value failed
+ --> e0208_const_overflow.nihon:1:15
+  |
+1 | 定数 MAX: 整32 = 2147483647 + 1;
+  |                  ^^^^^^^^^^^^^^ attempt to add with overflow
+  |
+  = note: constants are calculated while compiling, so a bad calculation is an error here, not a panic when the program runs
+
+error[E0208]: evaluation of constant value failed
+ --> e0208_const_overflow.nihon:2:16
+  |
+2 | 定数 ZERO: 整32 = 10 / (5 - 5);
+  |                   ^^^^^^^^^^^^ attempt to divide by zero
+  |
+  = note: constants are calculated while compiling, so a bad calculation is an error here, not a panic when the program runs
+
+error: aborting due to 2 previous errors

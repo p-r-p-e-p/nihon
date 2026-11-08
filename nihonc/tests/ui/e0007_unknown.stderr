@@ -1,0 +1,23 @@
+error[E0007]: unknown start of token: `@`
+ --> e0007_unknown.nihon:2:14
+  |
+2 |     束縛 a = 5 @ 3;
+  |                ^ unknown character
+
+error[E0007]: unknown start of token: `ёж`
+ --> e0007_unknown.nihon:3:12
+  |
+3 |     束縛 b = ёж;
+  |              ^^ unknown characters
+  |
+  = note: names may only use kanji, kana and latin letters
+
+error[E0007]: unknown start of token: `😀`
+ --> e0007_unknown.nihon:4:12
+  |
+4 |     束縛 c = 😀;
+  |              ^^ unknown character
+  |
+  = note: the character is U+1F600
+
+error: aborting due to 3 previous errors
