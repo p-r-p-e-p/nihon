@@ -111,6 +111,31 @@ pub fn lookup_keyword(text: &str) -> Option<(&'static KwInfo, bool)> {
     None
 }
 
+pub fn info_of(kw: Kw) -> &'static KwInfo {
+    KEYWORDS
+        .iter()
+        .find(|i| i.kw == kw)
+        .expect("toda palavra-chave esta na tabela")
+}
+
+/// Palavras reservadas que o parser do stage 0 ainda nao aceita.
+pub fn is_future_keyword(kw: Kw) -> bool {
+    matches!(
+        kw,
+        Kw::Match
+            | Kw::Struct
+            | Kw::Enum
+            | Kw::Impl
+            | Kw::Trait
+            | Kw::Pub
+            | Kw::Use
+            | Kw::SelfValue
+            | Kw::SelfType
+            | Kw::Unsafe
+            | Kw::Extern
+    )
+}
+
 pub fn lookup_macro(text: &str) -> Option<(&'static MacroInfo, bool)> {
     for m in MACROS {
         if text == m.jp {
@@ -125,6 +150,7 @@ pub fn lookup_macro(text: &str) -> Option<(&'static MacroInfo, bool)> {
 
 /// Falta um espaco entre a palavra-chave e o que vem colado depois?
 ///
+/// - `_` colado depois da palavra-chave nunca conta (`中_` e um nome valido);
 /// - latim com latim e uma palavra so (`moshix` e um nome comum);
 /// - latim com japones (ou o contrario) quase sempre e espaco esquecido:
 ///   `もしx`, `返却1`, `moshi値`;
@@ -132,6 +158,10 @@ pub fn lookup_macro(text: &str) -> Option<(&'static MacroInfo, bool)> {
 ///   resto nao (`もし値`): palavras de kanji seguidas de kanji ou de okurigana
 ///   (`中心`, `他人`, `無限ループ`) sao nomes normais.
 pub fn missing_space(kw_last: char, rest_first: char) -> bool {
+    // `中_` e o jeito normal de escapar de uma palavra reservada
+    if rest_first == '_' {
+        return false;
+    }
     let kw_latin = latinish(kw_last);
     let rest_latin = latinish(rest_first);
     if kw_latin != rest_latin {
@@ -207,6 +237,9 @@ mod tests {
         assert!(split_keyword_prefix("もしも").is_none());
         assert!(split_keyword_prefix("moshix").is_none());
         assert!(split_keyword_prefix("moshi1").is_none());
+        // o rename sugerido pelo compilador tem que ser aceito
+        assert!(split_keyword_prefix("中_").is_none());
+        assert!(split_keyword_prefix("もし_").is_none());
     }
 
     #[test]

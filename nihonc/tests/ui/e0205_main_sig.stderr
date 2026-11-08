@@ -1,0 +1,17 @@
+error[E0205]: `主` must not take parameters
+ --> e0205_main_sig.nihon:1:6
+  |
+1 | 関数 主(n: 整32) -> 整32 {
+  |         ^ remove the parameters
+  |
+  = note: `主` (shu, "main") is called by the system, which passes no arguments
+
+error[E0205]: `主` must not return a value
+ --> e0205_main_sig.nihon:1:17
+  |
+1 | 関数 主(n: 整32) -> 整32 {
+  |                     ^^^^ remove the return type
+  |
+  = note: `主` (shu, "main") returns nothing; exit codes arrive in a later stage
+
+error: aborting due to 2 previous errors

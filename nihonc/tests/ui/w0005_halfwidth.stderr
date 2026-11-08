@@ -20,4 +20,26 @@ help: use full-width katakana
 3 |     束縛 ガギ = 2;
   |          ~~~~
 
-warning: 2 warnings emitted
+warning[W0002]: unused variable: `ﾊﾝｶｸ`
+ --> w0005_halfwidth.nihon:2:8
+  |
+2 |     束縛 ﾊﾝｶｸ = 1;
+  |          ^^^^ never read
+  |
+help: if this is intentional, prefix it with an underscore
+  |
+2 |     束縛 _ﾊﾝｶｸ = 1;
+  |          +
+
+warning[W0002]: unused variable: `ｶﾞｷﾞ`
+ --> w0005_halfwidth.nihon:3:8
+  |
+3 |     束縛 ｶﾞｷﾞ = 2;
+  |          ^^^^ never read
+  |
+help: if this is intentional, prefix it with an underscore
+  |
+3 |     束縛 _ｶﾞｷﾞ = 2;
+  |          +
+
+warning: 4 warnings emitted

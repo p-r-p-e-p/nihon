@@ -1,18 +1,22 @@
 //! nihonc: compilador da linguagem Nihon (stage 0, fatia 1: lexer + erros).
 
+mod ast;
+mod codegen_c;
 mod diag;
 mod lexer;
+mod parser;
 mod source;
 mod width_table;
 
 use diag::render::render;
 use diag::{Config, Handler};
 use lexer::{lex, Token};
+use std::process::Command;
 use source::SourceFile;
 use std::io::IsTerminal;
 
 const USAGE: &str = "\
-nihonc - compiler for the Nihon language (stage 0, slice 1: lexer)
+nihonc - compiler for the Nihon language (stage 0, slice 2: parser + C backend)
 
 USAGE:
     nihonc [OPTIONS] <file.nihon>
@@ -21,6 +25,10 @@ OPTIONS:
     --strict       turn every warning into an error
     --romaji       accept keywords written in latin letters without warnings
     --tokens       print the tokens to stdout
+    --ast          print the syntax tree to stdout (no code generation)
+    --check        check the program, but do not generate anything
+    --emit-c       print the generated C to stdout instead of building
+    -o <file>      name of the executable (default: the file name without `.nihon`)
     -h, --help     show this help
     -V, --version  show the version
 ";
@@ -28,15 +36,29 @@ OPTIONS:
 struct Args {
     config: Config,
     tokens: bool,
+    ast: bool,
+    check: bool,
+    emit_c: bool,
+    out: Option<String>,
     path: String,
 }
 
 fn parse_args() -> Result<Args, String> {
     let mut config = Config::default();
     let mut tokens = false;
+    let (mut ast, mut check, mut emit_c) = (false, false, false);
+    let mut out: Option<String> = None;
     let mut path: Option<String> = None;
-    for a in std::env::args().skip(1) {
+    let mut it = std::env::args().skip(1);
+    while let Some(a) = it.next() {
         match a.as_str() {
+            "--ast" => ast = true,
+            "--check" => check = true,
+            "--emit-c" => emit_c = true,
+            "-o" => match it.next() {
+                Some(v) => out = Some(v),
+                None => return Err("`-o` needs a file name".to_string()),
+            },
             "--strict" => config.strict = true,
             "--romaji" => config.romaji = true,
             "--tokens" => tokens = true,
@@ -61,6 +83,10 @@ fn parse_args() -> Result<Args, String> {
         Some(path) => Ok(Args {
             config,
             tokens,
+            ast,
+            check,
+            emit_c,
+            out,
             path,
         }),
         None => Err("no input file".to_string()),
@@ -81,6 +107,120 @@ fn dump_tokens(file: &SourceFile, tokens: &[Token]) {
             t.kind,
             &file.text[t.span.range()]
         );
+    }
+}
+
+/// Mostra os diagnosticos ainda nao mostrados; devolve quantos ja foram.
+fn print_new(handler: &Handler, file: &SourceFile, color: bool, shown: usize) -> usize {
+    for d in &handler.diags[shown..] {
+        eprintln!("{}", render(d, file, color));
+    }
+    handler.diags.len()
+}
+
+fn finish_errors(handler: &Handler, file: &SourceFile, color: bool, shown: usize) -> i32 {
+    print_new(handler, file, color, shown);
+    let errors = handler.error_count();
+    let warnings = handler.warning_count();
+    let mut line = format!(
+        "error: aborting due to {}",
+        plural(errors, "previous error", "previous errors")
+    );
+    if warnings > 0 {
+        line.push_str(&format!("; {} emitted", plural(warnings, "warning", "warnings")));
+    }
+    eprintln!("{}", line);
+    1
+}
+
+fn summary_warnings(handler: &Handler) {
+    let w = handler.warning_count();
+    if w > 0 {
+        eprintln!("warning: {} emitted", plural(w, "warning", "warnings"));
+    }
+}
+
+const NO_CC: &str = "error: no C compiler found
+
+nihonc turns your program into C and uses the C compiler of your system to
+build the executable. Install one of these and try again:
+  Arch Linux:     sudo pacman -S gcc
+  Debian/Ubuntu:  sudo apt install gcc
+  Fedora:         sudo dnf install gcc
+  macOS:          xcode-select --install
+  Windows:        install MSYS2 (gcc) or LLVM (clang) and put it in the PATH
+You can also point to your compiler with the CC environment variable.
+To only see the C code, run again with `--emit-c`.";
+
+fn find_cc() -> Option<String> {
+    let mut candidates: Vec<String> = Vec::new();
+    if let Some(cc) = std::env::var_os("CC") {
+        candidates.push(cc.to_string_lossy().to_string());
+    }
+    candidates.extend(["cc", "gcc", "clang"].map(String::from));
+    candidates.into_iter().find(|c| {
+        Command::new(c)
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    })
+}
+
+fn build(args: &Args, c_code: &str) -> i32 {
+    let Some(cc) = find_cc() else {
+        eprintln!("{}", NO_CC);
+        return 1;
+    };
+    let exe = match &args.out {
+        Some(o) => o.clone(),
+        None => {
+            let stem = std::path::Path::new(&args.path)
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "a".to_string());
+            if cfg!(windows) {
+                format!("{}.exe", stem)
+            } else {
+                stem
+            }
+        }
+    };
+    let dir = std::env::temp_dir().join(format!("nihonc-{}", std::process::id()));
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        eprintln!("error: cannot create a temporary folder: {}", e);
+        return 1;
+    }
+    let c_path = dir.join("out.c");
+    if let Err(e) = std::fs::write(&c_path, c_code) {
+        eprintln!("error: cannot write the generated C: {}", e);
+        return 1;
+    }
+    let out = Command::new(&cc)
+        .arg("-O1")
+        .arg("-o")
+        .arg(&exe)
+        .arg(&c_path)
+        .arg("-lm")
+        .output();
+    match out {
+        Ok(o) if o.status.success() => {
+            let _ = std::fs::remove_dir_all(&dir);
+            0
+        }
+        Ok(o) => {
+            eprintln!(
+                "error: internal compiler error: the C compiler `{}` rejected the generated code",
+                cc
+            );
+            eprintln!("{}", String::from_utf8_lossy(&o.stderr));
+            eprintln!("note: this is a bug in nihonc; the generated C was kept at {}", c_path.display());
+            1
+        }
+        Err(e) => {
+            eprintln!("error: cannot run `{}`: {}", cc, e);
+            1
+        }
     }
 }
 
@@ -111,33 +251,40 @@ fn run() -> i32 {
     let tokens = lex(&file, &mut handler);
 
     let color = std::io::stderr().is_terminal() && std::env::var_os("NO_COLOR").is_none();
-    for d in &handler.diags {
-        eprintln!("{}", render(d, &file, color));
+    let shown = 0;
+    if handler.error_count() > 0 {
+        return finish_errors(&handler, &file, color, shown);
     }
-
-    let errors = handler.error_count();
-    let warnings = handler.warning_count();
-    if errors > 0 {
-        let mut line = format!(
-            "error: aborting due to {}",
-            plural(errors, "previous error", "previous errors")
-        );
-        if warnings > 0 {
-            line.push_str(&format!("; {} emitted", plural(warnings, "warning", "warnings")));
-        }
-        eprintln!("{}", line);
-        return 1;
-    }
-    if warnings > 0 {
-        eprintln!("warning: {} emitted", plural(warnings, "warning", "warnings"));
-    }
+    let shown = print_new(&handler, &file, color, shown);
 
     if args.tokens {
         dump_tokens(&file, &tokens);
-    } else {
-        println!("ok: {} tokens", tokens.len() - 1);
+        return 0;
     }
-    0
+
+    let Some(program) = parser::parse(&file, &tokens, &mut handler) else {
+        return finish_errors(&handler, &file, color, shown);
+    };
+    if args.ast {
+        print_new(&handler, &file, color, shown);
+        println!("{:#?}", program);
+        return 0;
+    }
+
+    let Some(c_code) = codegen_c::generate(&file, &program, &mut handler) else {
+        return finish_errors(&handler, &file, color, shown);
+    };
+    print_new(&handler, &file, color, shown);
+    summary_warnings(&handler);
+
+    if args.check {
+        return 0;
+    }
+    if args.emit_c {
+        print!("{}", c_code);
+        return 0;
+    }
+    build(&args, &c_code)
 }
 
 fn main() {

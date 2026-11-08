@@ -1,0 +1,6 @@
+error[E0204]: `主` function not found in the program
+  |
+  = note: every program starts at a function named `主` (shu, "main")
+  = help: add one, for example: `関数 主() { 表示!("こんにちは世界"); }` (kansuu shu, hyouji!: "function main, println!")
+
+error: aborting due to 1 previous error
