@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="#status"><img src="https://img.shields.io/badge/status-early%20development-orange" alt="Early development"></a>
+  <a href="#current-status"><img src="https://img.shields.io/badge/status-early%20development-orange" alt="Early development"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-blue" alt="MIT or Apache-2.0 license"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/implementation-Rust-000000?logo=rust" alt="Implemented in Rust"></a>
 </p>
@@ -24,26 +24,24 @@
 
 **Nihon** explores what a statically typed, systems-oriented programming language might look like when its source code is written in Japanese. Its design takes inspiration from Rust, while using kanji, hiragana, and katakana for language keywords and types.
 
-The project is at an early stage: the current compiler is a stage-zero implementation focused on lexical analysis and diagnostics. The language grammar and syntax are still evolving, and the compiler is not yet ready for general-purpose development.
+The project is in early development. The stage-zero compiler currently includes a lexer, parser, diagnostics, basic name/type/mutability checks, and a C code generator. The grammar and language design are still evolving; the compiler does not yet implement the full planned language.
 
 ## Current status
 
-- **Compiler:** stage 0; lexer and diagnostics are implemented.
-- **Parser and type checker:** not yet implemented.
-- **Syntax:** experimental and subject to change.
-- **Long-term goal:** build an initial compiler, then work toward a self-hosted compiler written in Nihon.
-
-See the [roadmap](#roadmap) for planned milestones.
+- **Compiler:** stage 0, slice 2; parses programs, performs initial checks, and generates C.
+- **Supported subset:** small programs with functions, primitive types, bindings, control flow, constants, and `表示!`; see [`nihonc/README.md`](nihonc/README.md) for current limitations.
+- **Syntax and grammar:** experimental and subject to change.
+- **Long-term goal:** develop the initial compiler, then work toward a self-hosted compiler written in Nihon.
 
 ## Language design
 
 Nihon aims to combine familiar systems-language concepts with Japanese-script source code. The planned design draws inspiration from Rust concepts such as structs, enums, traits, pattern matching, and static types. These are design goals, not all features of the current compiler.
 
-Keywords can be written in Japanese or in ASCII romaji. Romaji spellings are designed to be practical to type on a standard keyboard.
+Keywords can be written in Japanese or ASCII romaji. Romaji spellings are designed to be practical to type on a standard keyboard.
 
 ## Example
 
-The syntax below illustrates the language's direction. It is **provisional** and is not yet supported by the current compiler.
+This example illustrates the language's direction. Syntax and features may be provisional or unsupported by the current compiler.
 
 ```nihon
 構造体 点 {
@@ -109,46 +107,44 @@ kansuu shu() {
 ### Requirements
 
 - [Rust and Cargo](https://www.rust-lang.org/tools/install)
+- A C compiler (`cc`, `gcc`, or `clang`) to build generated programs. `--emit-c` can be used without one.
 
 ### Build and test
 
-From the repository root, build and run the test suite:
+From the repository root, build and test the compiler:
 
 ```bash
+cd nihonc
 cargo build --release
 cargo test
 ```
 
-The stage-zero compiler currently provides lexer-oriented commands:
+The compiler is then available at `nihonc/target/release/nihonc` from the repository root. For example:
 
 ```bash
-# Tokenize a source file
- target/release/nihonc --tokens path/to/file.nihon
+# Check a program without generating an executable
+nihonc/target/release/nihonc --check path/to/file.nihon
 
-# Read romaji keywords without warnings
- target/release/nihonc --romaji path/to/file.nihon
+# Print the parsed syntax tree or generated C
+nihonc/target/release/nihonc --ast path/to/file.nihon
+nihonc/target/release/nihonc --emit-c path/to/file.nihon
 
-# Treat warnings as errors
- target/release/nihonc --strict path/to/file.nihon
+# Generate and build an executable
+nihonc/target/release/nihonc path/to/file.nihon
 ```
 
-To run the compiler on a file with its default options:
-
-```bash
-target/release/nihonc path/to/file.nihon
-```
-
-For compiler-specific details and test instructions, see [`nihonc/README.md`](nihonc/README.md).
+For compiler-specific details, supported features, limitations, and tests, see [`nihonc/README.md`](nihonc/README.md).
 
 ## Roadmap
 
-- [x] Initial keyword table
-- [x] Lexer
-- [ ] Initial grammar specification
-- [ ] Parser
-- [ ] Type checking
-- [ ] Decide on a backend
-- [ ] Minimal standard library
+- [x] Initial keyword table and lexer
+- [x] Initial parser and syntax diagnostics
+- [x] Initial C backend
+- [x] Basic name, type, and mutability checks
+- [ ] Specify and stabilize the initial grammar
+- [ ] Expand type checking and improve diagnostics
+- [ ] Extend the language subset and add a minimal standard library
+- [ ] Evaluate backend and portability requirements as the language matures
 - [ ] Rewrite the compiler in Nihon (stage 1)
 - [ ] Bootstrap a compiler that can compile itself
 
