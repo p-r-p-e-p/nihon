@@ -1,0 +1,143 @@
+error[E0203]: variant `あ` is declared more than once
+ --> e0640_match.nihon:4:13
+  |
+4 | 列挙型 重複 { あ, あ }
+  |               --  ^^ declared again here
+  |               |
+  |               first declared here
+
+error[E0620]: enum `木` contains itself, so it would have infinite size
+ --> e0640_match.nihon:3:5
+  |
+3 | 列挙型 木 { 葉, 節(木) }
+  |        ^^ recursive enum
+  |
+  = note: a value cannot hold a copy of itself, directly or through other structs and enums
+  = help: references cannot be stored in fields yet, so a recursive type is not possible for now
+
+error[E0640]: non-exhaustive patterns: `色::青` not covered
+ --> e0640_match.nihon:7:8
+  |
+7 |     照合 c {
+  |          ^ pattern `色::青` not covered
+  |
+  = help: add an arm for it, or a catch-all arm: `_ => { ... }`
+
+error[E0643]: variant `形::四角` has 2 fields but the pattern has 1 field
+  --> e0640_match.nihon:16:9
+   |
+16 |         形::四角(w) => 表示!("{}", w),
+   |         ^^^^^^^^^^^ expected 2 fields
+   |
+   = help: use `_` for a field you do not need
+
+error[E0640]: non-exhaustive patterns: `_` not covered
+  --> e0640_match.nihon:18:8
+   |
+18 |     照合 n {
+   |          ^ pattern `_` not covered
+   |
+   = note: `整32` has too many values to list them all
+   = help: add a catch-all arm: `_ => { ... }`
+
+error[E0641]: mismatched types in pattern: expected `色`, found enum `形`
+  --> e0640_match.nihon:27:9
+   |
+27 |         形::円(_) => 表示!("x"),
+   |         ^^^^^^^^^ expected `色`
+
+error[E0202]: no variant named `黒` found for enum `色`
+  --> e0640_match.nihon:28:12
+   |
+28 |         色::黒 => 表示!("y"),
+   |             ^^ variant not found
+   |
+   = note: variants of `色`: `赤`, `緑`, `青`
+help: a variant with a similar name exists
+   |
+28 |         色::赤 => 表示!("y"),
+   |             ~~
+
+error[E0641]: mismatched types in pattern: expected `色`, found an integer
+  --> e0640_match.nihon:29:9
+   |
+29 |         1 => 表示!("z"),
+   |         ^ expected `色`
+
+error[E0301]: `照合` arms have incompatible types
+  --> e0640_match.nihon:34:14
+   |
+33 |         色::赤 => 1,
+   |                   - expected because of this: `整32`
+34 |         _ => "a",
+   |              ^^^ expected `整32`, found `文字列`
+   |
+   = note: every arm of a `照合` must produce the same type
+
+error[E0644]: names inside `|` patterns are not supported yet
+  --> e0640_match.nihon:37:9
+   |
+37 |         形::円(a) | 形::四角(a, _) => {}
+   |         ^^^^^^^^^ this alternative binds a name
+   |
+   = help: use one arm per alternative, or `_`
+
+error[E0644]: names inside `|` patterns are not supported yet
+  --> e0640_match.nihon:37:19
+   |
+37 |         形::円(a) | 形::四角(a, _) => {}
+   |                     ^^^^^^^^^^^^^^ this alternative binds a name
+   |
+   = help: use one arm per alternative, or `_`
+
+error[E0304]: cannot apply `==` to `色` and `色`
+  --> e0640_match.nihon:40:17
+   |
+40 |     束縛 q = 色::赤 == 色::青;
+   |              ------ ^^ ------ `色`
+   |              |      |
+   |              |      no implementation for `色 == 色`
+   |              `色`
+   |
+   = note: `色` is an enum defined in this program
+   = help: examine it with `照合` (shougou, "match") instead
+
+error[E0629]: `色` cannot be shown with `{}`
+  --> e0640_match.nihon:41:15
+   |
+41 |     表示!("{}", 色::緑);
+   |                 ^^^^^^ structs and enums have no text form yet
+   |
+   = help: examine it with `照合` (shougou, "match") and show what you find
+
+error[E0302]: variant `形::円` needs 1 argument
+  --> e0640_match.nihon:42:12
+   |
+42 |     束縛 p = 形::円;
+   |              ^^^^^^ used without arguments
+   |
+   = help: call it: `形::円(...)`
+
+error[E0302]: variant `色::赤` takes 0 arguments but 1 argument was supplied
+  --> e0640_match.nihon:43:12
+   |
+43 |     束縛 z = 色::赤(1);
+   |              ^^^^^^^^^ expected 0 arguments
+
+error[E0646]: cannot match on a value of type `実64`
+  --> e0640_match.nihon:44:8
+   |
+44 |     照合 1.5 { _ => {} }
+   |          ^^^ has type `実64`
+   |
+   = note: `照合` (shougou, "match") works on enums, integers, `文字`, `文字列` and `真偽` for now
+
+error[E0647]: range pattern is empty
+  --> e0640_match.nihon:45:12
+   |
+45 |     照合 n { 5..=1 => {}, _ => {} }
+   |              ^^^^^ this range contains no values
+   |
+   = note: a range `a..=b` needs `a <= b`, and `a..b` needs `a < b`
+
+error: aborting due to 17 previous errors

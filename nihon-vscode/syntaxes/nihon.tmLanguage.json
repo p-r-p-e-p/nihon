@@ -31,10 +31,16 @@
       "include": "#definitions"
     },
     {
+      "include": "#wildcard"
+    },
+    {
       "include": "#keywords"
     },
     {
       "include": "#types"
+    },
+    {
+      "include": "#paths"
     },
     {
       "include": "#calls"
@@ -227,6 +233,18 @@
           }
         }
       ]
+    },
+    "wildcard": {
+      "name": "variable.language.wildcard.nihon",
+      "match": "(?<![\\p{L}\\p{N}_])_(?![\\p{L}\\p{N}_])"
+    },
+    "paths": {
+      "match": "(?<![\\p{L}\\p{N}_])([\\p{L}_][\\p{L}\\p{N}_]*)(?=::)",
+      "captures": {
+        "1": {
+          "name": "entity.name.type.nihon"
+        }
+      }
     },
     "calls": {
       "match": "(?<![\\p{L}\\p{N}_])([\\p{L}_][\\p{L}\\p{N}_]*)(?=\\s*\\()",

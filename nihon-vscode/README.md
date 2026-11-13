@@ -15,7 +15,7 @@ Language support for **Nihon**, a Rust-style programming language written in kan
 
 ## Features
 
-- **Syntax highlighting** for kanji, kana and romaji keywords, types (`整8`…`整64`, `非負8`…`非負64`, `大きさ`, `実32`/`実64`, `真偽`, `文字`, `文字列` and their romaji forms), methods (`texto.長さ()`), macros (`表示!`), numbers, strings, characters and nested block comments.
+- **Syntax highlighting** for kanji, kana and romaji keywords, types (`整8`…`整64`, `非負8`…`非負64`, `大きさ`, `実32`/`実64`, `真偽`, `文字`, `文字列` and their romaji forms), methods (`texto.長さ()`), enums and `照合` patterns (`色::赤`, `_`), macros (`表示!`), numbers, strings, characters and nested block comments.
 - **Full-width character detection:** zenkaku punctuation, digits and letters (`；`, `１`, `（`…) are underlined in red, mirroring compiler error E0002. Half-width katakana is flagged like warning W0005.
 - **Live diagnostics:** errors and warnings from `nihonc` appear as you type (after a short pause), with error codes, notes and help text.
 - **Quick fixes:** press `Ctrl+.` on a diagnostic to apply the compiler's own suggestion, for example:
@@ -28,7 +28,7 @@ Language support for **Nihon**, a Rust-style programming language written in kan
 - **Fix all safe issues:** applies every automatic fix in the file at once.
 - **Romaji completion:** type `kansuu` and pick `関数` from the list. Types, macros and methods work the same way (`hyouji` → `表示!`, and after a dot `nagasa` → `長さ()`).
 - **Hover** shows the romaji spelling and English meaning of every keyword, type, macro and method.
-- **Snippets** with Japanese and romaji prefixes (`main`, `kansuu`, `moshi`, `kaku`, `teisuu`…).
+- **Snippets** with Japanese and romaji prefixes (`main`, `kansuu`, `moshi`, `kaku`, `teisuu`, `rekkyogata`, `shougou`…).
 - **Show tokens:** runs `nihonc --tokens` and opens the output beside the editor.
 
 ## Commands

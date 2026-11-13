@@ -59,6 +59,21 @@ assert.ok(d[2].extras.includes('note: pass `--romaji` to allow latin keywords'))
 d = parseOutput(fx('d.human.txt'));
 assert.deepStrictEqual(d.map((x) => x.code), ['E0106', 'E0102']);
 
+// ---- enums e `照合` (stage 1): saída humana real de tests/ui do nihonc
+d = parseOutput(fx('f.human.txt'));
+assert.deepStrictEqual(
+  d.map((x) => x.code),
+  ['E0203', 'E0620', 'E0640', 'E0643', 'E0640', 'E0641', 'E0202', 'E0641', 'E0301', 'E0644', 'E0644', 'E0304', 'E0629', 'E0302', 'E0302', 'E0646', 'E0647']
+);
+assert.deepStrictEqual(d[2].start, { line: 7, col: 8 });
+assert.ok(d[2].extras.includes('help: add an arm for it, or a catch-all arm: `_ => { ... }`'));
+assert.ok(d[6].extras.some((e) => e.startsWith('note: variants of')));
+assert.ok(d.every((x) => x.severity === 'error'));
+d = parseOutput(fx('g.human.txt'));
+assert.deepStrictEqual(d.map((x) => x.code), ['W0006', 'W0006', 'W0002']);
+assert.ok(d.every((x) => x.severity === 'warning'));
+assert.deepStrictEqual(d[0].start, { line: 33, col: 30 });
+
 // ---- fixes.js
 assert.strictEqual(toUtf16Column('    束縛 x = １；', 12), 11);
 assert.strictEqual(toUtf16Column('a𠀀b', 3), 3);                // 𠀀 (U+20000) ocupa 2 unidades UTF-16

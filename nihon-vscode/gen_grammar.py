@@ -36,8 +36,8 @@ grammar = {
  "scopeName": "source.nihon",
  "patterns": [{"include": "#comments"},{"include": "#strings"},{"include": "#chars"},
               {"include": "#zenkaku"},{"include": "#halfkana"},{"include": "#numbers"},{"include": "#methods"},
-              {"include": "#macros"},{"include": "#definitions"},{"include": "#keywords"},
-              {"include": "#types"},{"include": "#calls"},{"include": "#operators"}],
+              {"include": "#macros"},{"include": "#definitions"},{"include": "#wildcard"},{"include": "#keywords"},
+              {"include": "#types"},{"include": "#paths"},{"include": "#calls"},{"include": "#operators"}],
  "repository": {
   "comments": {"patterns": [
     {"name": "comment.line.double-slash.nihon", "match": "//.*$"},
@@ -82,6 +82,10 @@ grammar = {
      "captures": {"1": {"name": "punctuation.accessor.nihon"}, "2": {"name": "support.function.method.nihon"}}},
     {"match": f"(?<!\\.)(\\.)({ID})(?=\\s*\\()",
      "captures": {"1": {"name": "punctuation.accessor.nihon"}, "2": {"name": "entity.name.function.method.nihon"}}}]},
+  # `_` sozinho: o padrao que aceita qualquer coisa em `照合`
+  "wildcard": {"name": "variable.language.wildcard.nihon", "match": f"{B}_{E}"},
+  # `色::赤`, `点::新()`: o nome antes de `::` e um tipo (struct ou enum)
+  "paths": {"match": f"{B}({ID})(?=::)", "captures": {"1": {"name": "entity.name.type.nihon"}}},
   "calls": {"match": f"{B}({ID})(?=\\s*\\()", "captures": {"1": {"name": "entity.name.function.call.nihon"}}},
   "operators": {"name": "keyword.operator.nihon",
                 "match": "->|=>|==|!=|<=|>=|&&|\\|\\||::|\\.\\.=?|[+\\-*/%]=|[+\\-*/%=<>!&|]"}

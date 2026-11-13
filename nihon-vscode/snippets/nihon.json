@@ -201,5 +201,41 @@
     ],
     "body": "整形!(\"${1:{\\}}\", ${2:値})",
     "description": "format!"
+  },
+  "列挙型 (rekkyogata)": {
+    "prefix": [
+      "rekkyogata",
+      "列挙型"
+    ],
+    "body": [
+      "列挙型 ${1:名前} { ${2:一}, ${3:二} }"
+    ],
+    "description": "enum"
+  },
+  "列挙型 with data": {
+    "prefix": [
+      "rekkyogata-data",
+      "列挙型-値"
+    ],
+    "body": [
+      "列挙型 ${1:名前} {",
+      "\t${2:円}(${3:実64}),",
+      "\t${4:無し},",
+      "}"
+    ],
+    "description": "enum with a variant that carries a value"
+  },
+  "照合 (shougou)": {
+    "prefix": [
+      "shougou",
+      "照合"
+    ],
+    "body": [
+      "照合 ${1:値} {",
+      "\t${2:パターン} => ${3:{\\}},",
+      "\t_ => ${0:{\\}},",
+      "}"
+    ],
+    "description": "match"
   }
 }
