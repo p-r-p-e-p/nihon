@@ -398,7 +398,7 @@ impl<'a, 'h> Parser<'a, 'h> {
                 T::RBrace | T::Eof => return,
                 T::LBrace | T::LParen | T::LBracket => self.skip_group(),
                 T::Keyword(
-                    Kw::Let | Kw::Return | Kw::Break | Kw::Continue | Kw::If | Kw::While | Kw::Loop | Kw::For,
+                    Kw::Let | Kw::Return | Kw::Break | Kw::Continue | Kw::If | Kw::While | Kw::Loop | Kw::For | Kw::Match,
                 ) => return,
                 _ => {
                     self.bump();
@@ -413,7 +413,7 @@ impl<'a, 'h> Parser<'a, 'h> {
         }
         loop {
             match self.kind() {
-                T::Eof | T::Keyword(Kw::Fn | Kw::Const | Kw::Struct | Kw::Impl | Kw::Pub) => return,
+                T::Eof | T::Keyword(Kw::Fn | Kw::Const | Kw::Struct | Kw::Impl | Kw::Enum | Kw::Pub) => return,
                 T::LBrace | T::LParen | T::LBracket => self.skip_group(),
                 _ => {
                     self.bump();
@@ -444,6 +444,7 @@ impl<'a, 'h> Parser<'a, 'h> {
             T::Keyword(Kw::Const) => self.parse_const(),
             T::Keyword(Kw::Struct) => self.parse_struct(),
             T::Keyword(Kw::Impl) => self.parse_impl(),
+            T::Keyword(Kw::Enum) => self.parse_enum(),
             _ => {
                 let t = self.tok();
                 let d = Diagnostic::error(
@@ -514,6 +515,214 @@ impl<'a, 'h> Parser<'a, 'h> {
             body,
             span,
         })
+    }
+
+    fn parse_enum(&mut self) -> PResult<Item> {
+        let kw = self.bump();
+        let name = self.expect_ident("an enum name")?;
+        self.expect(T::LBrace, "`{`")?;
+        let mut variants = Vec::new();
+        while *self.kind() != T::RBrace {
+            let vname = self.expect_ident("a variant name")?;
+            let mut fields = Vec::new();
+            if self.eat(T::LParen) {
+                while *self.kind() != T::RParen {
+                    fields.push(self.parse_type()?);
+                    if !self.eat(T::Comma) {
+                        break;
+                    }
+                }
+                self.expect(T::RParen, "`,` or `)`")?;
+            }
+            variants.push(Variant { name: vname, fields });
+            if !self.eat(T::Comma) {
+                break;
+            }
+        }
+        self.expect(T::RBrace, "`,` or `}`")?;
+        Ok(Item::Enum(EnumItem {
+            name,
+            variants,
+            span: Span::new(kw.span.start, self.prev_end()),
+        }))
+    }
+
+    fn parse_match(&mut self) -> PResult<Expr> {
+        let kw = self.bump();
+        let scrut = self.parse_cond()?;
+        self.expect(T::LBrace, "`{`")?;
+        let saved = std::mem::replace(&mut self.no_struct, false);
+        let mut arms = Vec::new();
+        while *self.kind() != T::RBrace {
+            let pat = match self.parse_pat() {
+                Ok(p) => p,
+                Err(()) => {
+                    self.no_struct = saved;
+                    return Err(());
+                }
+            };
+            if let Err(()) = self.expect(T::FatArrow, "`=>`") {
+                self.no_struct = saved;
+                return Err(());
+            }
+            let body = if matches!(self.kind(), T::Keyword(Kw::Return | Kw::Break | Kw::Continue)) {
+                // `=> 返却 x,` : como no Rust, vale como um braco que nunca termina normalmente
+                self.parse_jump_arm()
+            } else if *self.kind() == T::LBrace {
+                self.parse_block_like()
+            } else {
+                self.parse_expr(0)
+            };
+            let body = match body {
+                Ok(b) => b,
+                Err(()) => {
+                    self.no_struct = saved;
+                    return Err(());
+                }
+            };
+            let block_like = matches!(
+                body.kind,
+                ExprKind::Block(_) | ExprKind::If { .. } | ExprKind::While { .. } | ExprKind::Loop { .. } | ExprKind::For { .. } | ExprKind::Match { .. }
+            );
+            arms.push(Arm { pat, body });
+            if !self.eat(T::Comma) && !block_like {
+                break;
+            }
+        }
+        self.no_struct = saved;
+        self.expect(T::RBrace, "`,` or `}`")?;
+        Ok(Expr {
+            kind: ExprKind::Match {
+                scrut: Box::new(scrut),
+                arms,
+            },
+            span: Span::new(kw.span.start, self.prev_end()),
+        })
+    }
+
+    /// `返却 x`, `中断` ou `続行` como corpo de um braco de `照合`.
+    fn parse_jump_arm(&mut self) -> PResult<Expr> {
+        let t = self.bump();
+        let kind = match t.kind {
+            T::Keyword(Kw::Return) => {
+                let value = if matches!(self.kind(), T::Comma | T::RBrace) {
+                    None
+                } else {
+                    Some(self.parse_expr(0)?)
+                };
+                StmtKind::Return(value)
+            }
+            T::Keyword(Kw::Break) => StmtKind::Break,
+            _ => StmtKind::Continue,
+        };
+        let span = Span::new(t.span.start, self.prev_end());
+        Ok(Expr {
+            kind: ExprKind::Block(Block {
+                stmts: vec![Stmt { kind, span }],
+                tail: None,
+                span,
+            }),
+            span,
+        })
+    }
+
+    fn parse_pat(&mut self) -> PResult<Pat> {
+        self.eat(T::Pipe);
+        let first = self.parse_pat1()?;
+        if *self.kind() != T::Pipe {
+            return Ok(first);
+        }
+        let start = first.span.start;
+        let mut alts = vec![first];
+        while self.eat(T::Pipe) {
+            alts.push(self.parse_pat1()?);
+        }
+        Ok(Pat {
+            span: Span::new(start, self.prev_end()),
+            kind: PatKind::Or(alts),
+        })
+    }
+
+    fn parse_pat1(&mut self) -> PResult<Pat> {
+        let t = self.tok();
+        match &t.kind {
+            T::Ident(name) if name == "_" => {
+                self.bump();
+                Ok(Pat { kind: PatKind::Wild, span: t.span })
+            }
+            T::Ident(name) => {
+                self.bump();
+                let id = Ident { name: name.clone(), span: t.span };
+                if !self.eat(T::ColonColon) {
+                    return Ok(Pat { kind: PatKind::Bind(id), span: t.span });
+                }
+                let vname = self.expect_ident("a variant name")?;
+                let mut fields = Vec::new();
+                if self.eat(T::LParen) {
+                    while *self.kind() != T::RParen {
+                        fields.push(self.parse_pat()?);
+                        if !self.eat(T::Comma) {
+                            break;
+                        }
+                    }
+                    self.expect(T::RParen, "`,` or `)`")?;
+                }
+                Ok(Pat {
+                    kind: PatKind::Variant { ty: id, name: vname, fields },
+                    span: Span::new(t.span.start, self.prev_end()),
+                })
+            }
+            T::Int(_) | T::Str(_) | T::Char(_) | T::Minus | T::Keyword(Kw::True | Kw::False) => {
+                let lo = self.parse_pat_lit()?;
+                let inclusive = match self.kind() {
+                    T::DotDotEq => true,
+                    T::DotDot => false,
+                    _ => {
+                        let span = lo.span;
+                        return Ok(Pat { kind: PatKind::Lit(Box::new(lo)), span });
+                    }
+                };
+                self.bump();
+                let hi = self.parse_pat_lit()?;
+                let span = Span::new(lo.span.start, hi.span.end);
+                Ok(Pat {
+                    kind: PatKind::Range { lo: Box::new(lo), hi: Box::new(hi), inclusive },
+                    span,
+                })
+            }
+            _ => {
+                let d = Diagnostic::error(
+                    E0105,
+                    format!("expected a pattern, found {}", self.describe(t)),
+                )
+                .primary(t.span, "expected a pattern")
+                .note("a pattern is `_`, a name, a literal such as `1` or `1..=5`, or a variant such as `形::円(r)`");
+                let d = self.with_kw_notes(d, t);
+                self.emit(d);
+                Err(())
+            }
+        }
+    }
+
+    /// Literal de um padrao: `5`, `-5`, `"a"`, `'a'`, `真`.
+    fn parse_pat_lit(&mut self) -> PResult<Expr> {
+        let t = self.tok();
+        if t.kind == T::Minus {
+            self.bump();
+            let inner = self.parse_primary()?;
+            if !matches!(inner.kind, ExprKind::Int(_)) {
+                let d = Diagnostic::error(E0105, "expected a number after `-` in a pattern")
+                    .primary(inner.span, "expected a number");
+                self.emit(d);
+                return Err(());
+            }
+            let span = Span::new(t.span.start, inner.span.end);
+            return Ok(Expr {
+                kind: ExprKind::Unary { op: UnOp::Neg, expr: Box::new(inner) },
+                span,
+            });
+        }
+        self.parse_primary()
     }
 
     fn parse_struct(&mut self) -> PResult<Item> {
@@ -686,7 +895,7 @@ impl<'a, 'h> Parser<'a, 'h> {
                 self.emit(d);
                 Err(())
             }
-            T::Keyword(Kw::If | Kw::While | Kw::Loop | Kw::For) | T::LBrace => {
+            T::Keyword(Kw::If | Kw::While | Kw::Loop | Kw::For | Kw::Match) | T::LBrace => {
                 let e = self.parse_block_like()?;
                 if self.eat(T::Semi) {
                     return Ok(stmt(StmtKind::Expr(e), self.prev_end()));
@@ -747,6 +956,7 @@ impl<'a, 'h> Parser<'a, 'h> {
                 })
             }
             T::Keyword(Kw::For) => self.parse_for(),
+            T::Keyword(Kw::Match) => self.parse_match(),
             _ => {
                 let body = self.parse_block()?;
                 let span = body.span;
@@ -1108,7 +1318,7 @@ impl<'a, 'h> Parser<'a, 'h> {
                     span: Span::new(t.span.start, self.prev_end()),
                 })
             }
-            T::Keyword(Kw::If | Kw::While | Kw::Loop | Kw::For) | T::LBrace => self.parse_block_like(),
+            T::Keyword(Kw::If | Kw::While | Kw::Loop | Kw::For | Kw::Match) | T::LBrace => self.parse_block_like(),
             _ => {
                 let d = Diagnostic::error(
                     E0105,
@@ -1161,6 +1371,7 @@ mod tests {
                 let a: Vec<String> = args.iter().map(s).collect();
                 format!("(method {} {} {})", s(recv), name.name, a.join(" "))
             }
+            ExprKind::Match { scrut, arms } => format!("(match {} {})", s(scrut), arms.len()),
             ExprKind::Field { base, name } => format!("(field {} {})", s(base), name.name),
             ExprKind::AssocPath { ty, name } => format!("(path {}::{})", ty.name, name.name),
             ExprKind::StructLit { name, fields } => {
@@ -1271,6 +1482,31 @@ mod tests {
         let kinds: Vec<_> = im.fns.iter().map(|f| f.self_param.map(|s| s.kind)).collect();
         assert_eq!(kinds, vec![Some(SelfKind::RefMut), Some(SelfKind::Value), None]);
         assert_eq!(im.fns[0].params.len(), 1);
+    }
+
+    #[test]
+    fn enum_items_and_match_expressions() {
+        let src = "列挙型 形 { 円(実64), 四角(実64, 実64), 無し, }\n関数 f(x: 形) { 束縛 y = 照合 x { 形::円(r) => r, 形::四角(a, _) | 形::無し => { 0.0 } _ => 返却, }; }";
+        let file = SourceFile::new("t.nihon", src.to_string());
+        let mut h = Handler::new(Config::default());
+        let toks = lex(&file, &mut h);
+        let prog = parse(&file, &toks, &mut h).expect("parses");
+        assert!(h.diags.is_empty(), "{:?}", codes(&h.diags));
+        let Item::Enum(en) = &prog.items[0] else { panic!() };
+        let counts: Vec<usize> = en.variants.iter().map(|v| v.fields.len()).collect();
+        assert_eq!(counts, vec![1, 2, 0]);
+        let Item::Fn(f) = &prog.items[1] else { panic!() };
+        let StmtKind::Let { init, .. } = &f.body.stmts[0].kind else { panic!() };
+        let ExprKind::Match { arms, .. } = &init.kind else { panic!() };
+        assert_eq!(arms.len(), 3);
+        assert!(matches!(arms[1].pat.kind, PatKind::Or(_)));
+        assert!(matches!(arms[2].pat.kind, PatKind::Wild));
+    }
+
+    #[test]
+    fn match_scrutinee_is_not_a_struct_literal() {
+        let e = expr_of("照合 x { _ => 1 }");
+        assert_eq!(e, "(match x 1)");
     }
 
     #[test]

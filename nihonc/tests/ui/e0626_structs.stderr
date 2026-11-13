@@ -61,7 +61,7 @@ error[E0629]: `点` cannot be shown with `{}`
   --> e0626_structs.nihon:21:15
    |
 21 |     表示!("{}", s);
-   |                 ^ structs have no text form yet
+   |                 ^ structs and enums have no text form yet
    |
    = help: show the fields one by one, for example `表示!("{}", p.x)` (hyouji!)
 

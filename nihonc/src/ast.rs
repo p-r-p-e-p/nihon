@@ -13,6 +13,57 @@ pub enum Item {
     Const(ConstItem),
     Struct(StructItem),
     Impl(ImplItem),
+    Enum(EnumItem),
+}
+
+#[derive(Debug, Clone)]
+pub struct Variant {
+    pub name: Ident,
+    pub fields: Vec<Type>,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct EnumItem {
+    pub name: Ident,
+    pub variants: Vec<Variant>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct Arm {
+    pub pat: Pat,
+    pub body: Expr,
+}
+
+#[derive(Debug, Clone)]
+pub struct Pat {
+    pub kind: PatKind,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub enum PatKind {
+    /// `_`
+    Wild,
+    /// um nome novo: `n`
+    Bind(Ident),
+    /// numero, texto, caractere, `真` / `偽` (ou `-5`)
+    Lit(Box<Expr>),
+    /// `1..=5`
+    Range {
+        lo: Box<Expr>,
+        hi: Box<Expr>,
+        inclusive: bool,
+    },
+    /// `形::円(r)`
+    Variant {
+        ty: Ident,
+        name: Ident,
+        fields: Vec<Pat>,
+    },
+    /// `a | b`
+    Or(Vec<Pat>),
 }
 
 #[derive(Debug, Clone)]
@@ -199,6 +250,10 @@ pub enum ExprKind {
     Call {
         callee: Box<Expr>,
         args: Vec<Expr>,
+    },
+    Match {
+        scrut: Box<Expr>,
+        arms: Vec<Arm>,
     },
     Field {
         base: Box<Expr>,
