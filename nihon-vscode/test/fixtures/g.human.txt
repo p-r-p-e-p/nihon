@@ -1,0 +1,28 @@
+warning[W0006]: unreachable pattern
+  --> w0006_unreachable_arm.nihon:33:30
+   |
+33 |     照合 3 { 1 => {}, _ => {}, 2 => {} }
+   |                                ^ no value reaches this arm
+   |
+   = note: the arms above it already match every value this pattern could match
+
+warning[W0006]: unreachable pattern
+  --> w0006_unreachable_arm.nihon:34:36
+   |
+34 |     照合 c { 色::赤 => {}, 色::緑 => {}, 色::赤 => {} }
+   |                                          ^^^^^^ no value reaches this arm
+   |
+   = note: the arms above it already match every value this pattern could match
+
+warning[W0002]: unused variable: `未使用`
+  --> w0006_unreachable_arm.nihon:35:8
+   |
+35 |     束縛 未使用 = 照合 c { 色::赤 => 1, 色::緑 => 2 };
+   |          ^^^^^^ never read
+   |
+help: if this is intentional, prefix it with an underscore
+   |
+35 |     束縛 _未使用 = 照合 c { 色::赤 => 1, 色::緑 => 2 };
+   |          +
+
+warning: 3 warnings emitted

@@ -227,6 +227,21 @@ const diagsOf = (doc) => collections.get('nihon').get(doc.uri.toString()) || [];
   assert.ok(ookisa && ookisa.filterText.includes('ookisa'));
   assert.ok(complete('    0..', 7).map((i) => i.label).includes('関数')); // `..` (intervalo) não abre a lista de métodos
 
+  // ---------- 9. enums e `照合`: variante com nome parecido (só dica) e `照合` que não cobre tudo
+  const doc6 = makeDoc('enum1.nihon', '列挙型 色 { 赤, 緑 }\n関数 主() {\n    束縛 c = 色::赤;\n    照合 c {\n        色::黒 => {},\n        _ => {},\n    }\n}\n');
+  await ext._internals.check(doc6);
+  const v6 = diagsOf(doc6).find((d) => d.code === 'E0202');
+  assert.ok(v6, 'E0202 (variante inexistente) ausente');
+  const a6 = provider.provideCodeActions(doc6, v6.range, { diagnostics: [v6] }).find((a) => a.kind === Kind.QuickFix);
+  assert.strictEqual(a6.title, 'A variant with a similar name exists: `赤`');
+  assert.strictEqual(a6.isPreferred, false);
+  assert.strictEqual(ext._internals.fixAllEdit(doc6), null);
+
+  const doc7 = makeDoc('enum2.nihon', '列挙型 色 { 赤, 緑 }\n関数 主() {\n    束縛 c = 色::赤;\n    照合 c {\n        色::赤 => {},\n    }\n}\n');
+  await ext._internals.check(doc7);
+  assert.ok(diagsOf(doc7).some((d) => d.code === 'E0640'), 'E0640 (照合 nao cobre todos os casos) ausente');
+  assert.strictEqual(ext._internals.fixAllEdit(doc7), null);
+
   fs.rmSync(dir, { recursive: true, force: true });
   console.log('e2e.js: ok');
 })().catch((e) => {

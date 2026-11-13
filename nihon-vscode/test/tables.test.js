@@ -52,6 +52,12 @@ for (const list of [tables.KEYWORDS, tables.TYPES, tables.METHODS]) {
 const macroRule = json('syntaxes/nihon.tmLanguage.json').repository.macros.match;
 assert.ok(macroRule.includes('(!)'), 'regra de macro mudou');
 
+// regras novas para enums e `照合`
+const rep = json('syntaxes/nihon.tmLanguage.json').repository;
+assert.ok(rep.wildcard && rep.paths, 'regras wildcard/paths ausentes');
+assert.ok(json('syntaxes/nihon.tmLanguage.json').patterns.some((p) => p.include === '#wildcard'));
+assert.ok(json('syntaxes/nihon.tmLanguage.json').patterns.some((p) => p.include === '#paths'));
+
 // ---- snippets
 const snippets = json('snippets/nihon.json');
 const prefixes = new Set();
@@ -64,7 +70,7 @@ for (const [name, s] of Object.entries(snippets)) {
     prefixes.add(p);
   }
 }
-for (const p of ['kouzoutai', 'jissou', 'hokamoshi', 'henkyaku', 'seikei', 'shutsuryoku']) {
+for (const p of ['kouzoutai', 'jissou', 'hokamoshi', 'henkyaku', 'seikei', 'shutsuryoku', 'rekkyogata', 'shougou']) {
   assert.ok(prefixes.has(p), `snippet ${p} ausente`);
 }
 
