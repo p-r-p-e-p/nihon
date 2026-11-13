@@ -122,9 +122,7 @@ pub fn info_of(kw: Kw) -> &'static KwInfo {
 pub fn is_future_keyword(kw: Kw) -> bool {
     matches!(
         kw,
-        Kw::Match
-            | Kw::Enum
-            | Kw::Trait
+        Kw::Trait
             | Kw::Use
             | Kw::Unsafe
             | Kw::Extern

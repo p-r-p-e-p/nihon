@@ -31,8 +31,8 @@ The project is in early development. The compiler is written in Rust, with no ex
 ## Current status
 
 - **Compiler:** stage 0 plus the first part of stage 1. It parses programs, checks names, types and mutability, and generates C.
-- **Supported subset:** functions, constants, bindings, control flow, structs with methods (`構造体`, `実装`), references `&` and `&可変` (without a borrow checker yet), the number types (`整8` to `整64`, `非負8` to `非負64`, `大きさ`, `実32`, `実64`), `真偽`, `文字` and `文字列` (text), and the macros `表示!`, `出力!`, `異常終了!`, `表明!`, `整形!` and `未実装!`. See [`nihonc/README.md`](nihonc/README.md) for the details and current limitations.
-- **Not yet supported:** enums, `照合` (pattern matching), `任意` and `結果` (optional values and results), arrays, and tuples. These are the rest of stage 1.
+- **Supported subset:** functions, constants, bindings, control flow, structs with methods (`構造体`, `実装`), enums and `照合` (pattern matching with a completeness check), references `&` and `&可変` (without a borrow checker yet), the number types (`整8` to `整64`, `非負8` to `非負64`, `大きさ`, `実32`, `実64`), `真偽`, `文字` and `文字列` (text), and the macros `表示!`, `出力!`, `異常終了!`, `表明!`, `整形!` and `未実装!`. See [`nihonc/README.md`](nihonc/README.md) for the details and current limitations.
+- **Not yet supported:** `任意` and `結果` (optional values and results), methods on enums, arrays, and tuples. These are the rest of stage 1.
 - **Editor support:** `--message-format=json` already prints diagnostics for editors; the VS Code plugin is planned.
 - **Syntax and grammar:** experimental and subject to change.
 - **Long-term goal:** grow the compiler stage by stage, and finish with a self-hosted compiler written in Nihon.
@@ -120,7 +120,8 @@ kansuu shu() {
 | `return` | 返却 | `henkyaku` | Return |
 | `as` | として | `toshite` | Conversion |
 | `true` / `false` | 真 / 偽 | `shin` / `gi` | True / false |
-| `match` | 照合 | `shougou` | Pattern matching (planned) |
+| `match` | 照合 | `shougou` | Pattern matching |
+| `enum` | 列挙型 | `rekkyogata` | Enumeration |
 | `struct` | 構造体 | `kouzoutai` | Structure |
 | `impl` | 実装 | `jissou` | Implementation |
 | `self` / `Self` | 自分 / 自身 | `jibun` / `jishin` | Oneself / the type itself |
@@ -182,7 +183,8 @@ For compiler-specific details, supported features, limitations, and tests, see [
 - [x] Text type `文字列`, with `整形!`
 - [x] `--message-format=json` for editors
 - [x] Structs and methods (`構造体`, `実装`), references `&` and `&可変`
-- [ ] Enums, `照合`, `任意` and `結果`
+- [x] Enums and `照合`
+- [ ] `任意` and `結果`
 - [ ] Arrays and tuples
 - [ ] Editor support: TextMate grammar and VS Code plugin
 - [ ] Installer: release binaries, install script, and distribution packages

@@ -127,3 +127,21 @@ pub const E0628: &str = "E0628";
 pub const E0629: &str = "E0629";
 /// Funcao sem `自分` chamada como metodo.
 pub const E0631: &str = "E0631";
+
+// ---- Enums e `照合` (E064x) ----
+/// `照合` que nao cobre todos os casos.
+pub const E0640: &str = "E0640";
+/// Padrao de outro tipo que o valor examinado.
+pub const E0641: &str = "E0641";
+/// Variante com o numero errado de campos em um padrao.
+pub const E0643: &str = "E0643";
+/// Nomes dentro de padroes `|` (ainda nao suportado).
+pub const E0644: &str = "E0644";
+/// O mesmo nome dado duas vezes no mesmo padrao.
+pub const E0645: &str = "E0645";
+/// `照合` sobre um tipo que ainda nao pode ser examinado.
+pub const E0646: &str = "E0646";
+/// Intervalo vazio em um padrao.
+pub const E0647: &str = "E0647";
+/// Braco de `照合` que nunca e alcancado.
+pub const W0006: &str = "W0006";

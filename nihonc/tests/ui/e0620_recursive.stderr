@@ -13,8 +13,8 @@ error[E0620]: struct `木` contains itself, so it would have infinite size
 1 | 構造体 木 {
   |        ^^ recursive struct
   |
-  = note: a struct cannot hold a copy of itself, directly or through other structs
-  = help: references cannot be stored in fields yet, so a recursive struct is not possible for now
+  = note: a value cannot hold a copy of itself, directly or through other structs and enums
+  = help: references cannot be stored in fields yet, so a recursive type is not possible for now
 
 error[E0620]: struct `甲` contains itself, so it would have infinite size
  --> e0620_recursive.nihon:6:5
@@ -22,8 +22,8 @@ error[E0620]: struct `甲` contains itself, so it would have infinite size
 6 | 構造体 甲 { 乙: 乙 }
   |        ^^ recursive struct
   |
-  = note: a struct cannot hold a copy of itself, directly or through other structs
-  = help: references cannot be stored in fields yet, so a recursive struct is not possible for now
+  = note: a value cannot hold a copy of itself, directly or through other structs and enums
+  = help: references cannot be stored in fields yet, so a recursive type is not possible for now
 
 error[E0622]: functions cannot return references yet
   --> e0620_recursive.nihon:11:17

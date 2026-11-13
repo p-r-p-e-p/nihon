@@ -2,7 +2,7 @@
 
 The compiler for **Nihon** (`.nihon`), a Rust-style language written in Japanese.
 
-Status: stage 0 plus the first part of stage 1 (lexer, parser, checks, C code generator, the text type `文字列`, and structs with methods). No external dependencies.
+Status: stage 0 plus the first part of stage 1 (lexer, parser, checks, C code generator, the text type `文字列`, structs with methods, and enums with `照合`). No external dependencies.
 
 ## How it works
 
@@ -78,9 +78,11 @@ Exit codes: `0` success, `1` the program has errors, `2` wrong command line.
 | Macros `表示!` `出力!` `異常終了!` `表明!` `整形!` `未実装!` | `{}` placeholders and `{{` `}}` |
 | Number types `整8` `整16` `整32` `整64`, `非負8` `非負16` `非負32` `非負64`, `大きさ` (ookisa, `usize`), `実32` `実64` | integers panic on overflow (exit code 101), like Rust in debug mode; `大きさ` is 64 bits for now |
 | Types `真偽` `文字` `文字列` | boolean, one character, text |
-| Text: `+`, `+=`, `==`, `<`, `.長さ()`, `.バイト数()` | `長さ` (nagasa) counts characters, `バイト数` (baitosuu) counts bytes |
+| Text: `+`, `+=`, `==`, `<`, `.長さ()`, `.バイト数()` | `長さ` (nagasa) counts characters, `バイト数` (baitosuu) counts bytes; both return a `大きさ` (ookisa, `usize`) |
 | Structs: `構造体 点 { x: 整32 }` (kouzoutai, `struct`), literals `点 { x: 1 }`, fields `p.x`, `p.x = 5` | assigning needs `可変` (kahen, `mut`) on the variable |
 | Methods: `実装 点 { ... }` (jissou, `impl`), `点::新()` (associated function), `p.動く()` (method) | first parameter `自分` (jibun, `self`), `&自分`, `&可変 自分`; `自身` (jishin, `Self`) is the struct's own type |
+| Enums: `列挙型 形 { 円(実64), 無し }` (rekkyogata, `enum`), values `形::円(1.0)` and `形::無し` | variants may carry values of any type, even structs and other enums |
+| `照合 x { 形::円(r) => ..., _ => ... }` (shougou, `match`) | an expression; patterns: `_`, names, numbers, `文字`, `文字列`, `真` / `偽`, ranges `1..=5`, alternatives `a \| b`, and variants with nested patterns. The compiler checks that every case is covered (E0640) and warns about arms that can never run (W0006) |
 | References: `&p`, `&可変 p`, types `&点` and `&可変 点` | syntax and mutability are checked; there is no borrow checker yet |
 | `公開` (koukai, `pub`) | accepted and ignored for now: everything is public |
 
@@ -108,4 +110,6 @@ The entry point is a function named `主` (shu, "main") or `shu`. Neither gets a
 - References point only to structs, and can be used only as parameters and local variables. A function cannot return a reference and a field cannot hold one (error E0622), because there is no borrow checker to keep them safe.
 - Structs cannot be printed with `表示!` yet (error E0629) and cannot be compared with `==`: compare the fields one by one. Constants cannot have a struct type.
 - A struct literal is not allowed directly in the header of `もし`, `間` or `各` (like in Rust); wrap it in parentheses.
-- Not supported yet: `列挙型`, `照合`, `任意`, `結果`, arrays and tuples. They are reserved words, and using them gives a clear error.
+- Enums are plain values too (copied when passed around). They cannot have methods yet (`実装` works on structs only), cannot be compared with `==`, and cannot be printed: examine them with `照合`.
+- In `照合`, a `|` pattern cannot bind names (use one arm per case), there are no guards (`もし` after a pattern) and no struct or tuple patterns yet. Integer ranges that cover a whole type still need a `_` arm.
+- Not supported yet: `任意`, `結果`, arrays and tuples. They are reserved words, and using them gives a clear error.
