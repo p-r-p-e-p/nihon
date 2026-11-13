@@ -186,7 +186,7 @@ For compiler-specific details, supported features, limitations, and tests, see [
 - [x] Enums and `照合`
 - [ ] `任意` and `結果`
 - [ ] Arrays and tuples
-- [ ] Editor support: TextMate grammar and VS Code plugin
+- [x] Editor support: TextMate grammar and VS Code plugin
 - [ ] Installer: release binaries, install script, and distribution packages
 - [ ] Project tool (like Cargo) and a minimal standard library
 - [ ] Owned text and references checked by the compiler
