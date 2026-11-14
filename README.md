@@ -26,14 +26,14 @@
 
 The compiler, `nihonc`, is strict like `rustc`: it refuses sloppy code and explains how to fix it. Messages are in English, with the Japanese words always shown next to their romaji reading and meaning. `nihonc` turns a program into C and uses the C compiler of your system, so there is no virtual machine and the result is a native executable.
 
-The project is in early development. The compiler is written in Rust, with no external dependencies. It currently includes a lexer, parser, diagnostics, name/type/mutability checks, a C code generator, the text type, and structs with methods. The grammar and language design are still evolving; the compiler does not yet implement the full planned language.
+The project is in early development. The compiler is written in Rust, with no external dependencies. It currently includes a lexer, parser, diagnostics, name/type/mutability checks, a C code generator, the text type, structs and enums with methods, and pattern matching. The grammar and language design are still evolving; the compiler does not yet implement the full planned language.
 
 ## Current status
 
-- **Compiler:** stage 0 plus the first part of stage 1. It parses programs, checks names, types and mutability, and generates C.
-- **Supported subset:** functions, constants, bindings, control flow, structs with methods (`構造体`, `実装`), enums and `照合` (pattern matching with a completeness check), references `&` and `&可変` (without a borrow checker yet), the number types (`整8` to `整64`, `非負8` to `非負64`, `大きさ`, `実32`, `実64`), `真偽`, `文字` and `文字列` (text), and the macros `表示!`, `出力!`, `異常終了!`, `表明!`, `整形!` and `未実装!`. See [`nihonc/README.md`](nihonc/README.md) for the details and current limitations.
-- **Not yet supported:** `任意` and `結果` (optional values and results), methods on enums, arrays, and tuples. These are the rest of stage 1.
-- **Editor support:** `--message-format=json` already prints diagnostics for editors; the VS Code plugin is planned.
+- **Compiler:** stage 0 plus most of stage 1. It parses programs, checks names, types and mutability, and generates C.
+- **Supported subset:** functions, constants, bindings, control flow, structs and enums with methods (`構造体`, `列挙型`, `実装`), pattern matching with `照合` (with a completeness check), enums that can be printed and compared with `==`, references `&` and `&可変` (without a borrow checker yet), the number types (`整8` to `整64`, `非負8` to `非負64`, `大きさ`, `実32`, `実64`), `真偽`, `文字` and `文字列` (text), and the macros `表示!`, `出力!`, `異常終了!`, `表明!`, `整形!` and `未実装!`. See [`nihonc/README.md`](nihonc/README.md) for the details and current limitations.
+- **Not yet supported:** `任意` and `結果` (optional values and results), arrays, and tuples. These are the rest of stage 1.
+- **Editor support:** `--message-format=json` prints diagnostics for editors, and there is a TextMate grammar and a VS Code plugin.
 - **Syntax and grammar:** experimental and subject to change.
 - **Long-term goal:** grow the compiler stage by stage, and finish with a self-hosted compiler written in Nihon.
 
@@ -66,6 +66,33 @@ This example uses structs and methods, which the compiler supports now. The comm
     }
 }
 ```
+
+Enums, pattern matching and methods on enums. Every case of a `照合` must be covered, or the compiler reports an error. An enum can be printed: a variant shows as its name, followed by its values in parentheses.
+
+```nihon
+列挙型 形 {                                   // rekkyogata katachi = enum Shape
+    円(実64),                                 // en(jitsu64) = Circle(f64)
+    四角(実64, 実64),                         // shikaku(jitsu64, jitsu64) = Rectangle(f64, f64)
+    無し,                                     // nashi = Empty
+}
+
+実装 形 {                                     // jissou katachi = impl Shape
+    関数 面積(自分) -> 実64 {                 // kansuu menseki(jibun) -> jitsu64 = fn area(self) -> f64
+        照合 自分 {                           // shougou jibun = match self
+            形::円(r) => r * r * 3.0,         // katachi::en(r) = Shape::Circle(r)
+            形::四角(w, h) => w * h,          // katachi::shikaku(w, h) = Shape::Rectangle(w, h)
+            形::無し => 0.0,                  // katachi::nashi = Shape::Empty
+        }
+    }
+}
+
+関数 主() {                                   // kansuu shu() = fn main()
+    束縛 f = 形::四角(2.0, 3.0);              // sokubaku f = katachi::shikaku(2.0, 3.0) = let f = Shape::Rectangle(2.0, 3.0);
+    表示!("{}: {}", f, f.面積());             // hyouji!("{}: {}", f, f.menseki()) = println!("{}: {}", f, f.area())
+}
+```
+
+This prints `四角(2, 3): 6`.
 
 A program that works with the current compiler:
 
@@ -183,7 +210,7 @@ For compiler-specific details, supported features, limitations, and tests, see [
 - [x] Text type `文字列`, with `整形!`
 - [x] `--message-format=json` for editors
 - [x] Structs and methods (`構造体`, `実装`), references `&` and `&可変`
-- [x] Enums and `照合`
+- [x] Enums and `照合`, with methods, printing and `==`
 - [ ] `任意` and `結果`
 - [ ] Arrays and tuples
 - [x] Editor support: TextMate grammar and VS Code plugin

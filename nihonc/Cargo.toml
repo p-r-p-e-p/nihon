@@ -1,10 +1,10 @@
 [package]
 name = "nihonc"
-version = "0.4.0"
+version = "0.4.5"
 edition = "2021"
 description = "Compiler for the Nihon programming language (stage 1)"
 
-# Zero dependencies
+# Zero dependencias.
 [dependencies]
 
 [profile.release]

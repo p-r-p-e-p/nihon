@@ -16,7 +16,7 @@ use crate::diag::codes::*;
 use crate::diag::{Diagnostic, Handler};
 use crate::lexer::keywords::{lookup_macro, MACROS};
 use crate::source::{SourceFile, Span};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 // ------------------------------------------------------------------- tipos
 
@@ -56,6 +56,9 @@ struct TyInfo {
     romaji: &'static str,
     meaning: &'static str,
 }
+
+/// Os donos de `実装` sao structs (indice) ou enums (`ENUM_OWNER` + indice).
+const ENUM_OWNER: u16 = 0x8000;
 
 const TYPES: &[TyInfo] = &[
     TyInfo { ty: Ty::I8, jp: "整8", romaji: "sei8", meaning: "8-bit signed integer" },
@@ -567,6 +570,9 @@ struct Cg<'a, 'h> {
     types: String,
     /// A struct do bloco `実装` em que estamos (`自身`).
     cur_self: Option<u16>,
+    /// Enums que ja tem funcao de escrita (`表示!`) / de comparacao (`==`) em C.
+    enum_writers: HashSet<u16>,
+    enum_eqs: HashSet<u16>,
 }
 
 pub fn generate(file: &SourceFile, prog: &Program, handler: &mut Handler) -> Option<String> {
@@ -597,6 +603,8 @@ pub fn generate(file: &SourceFile, prog: &Program, handler: &mut Handler) -> Opt
         methods: HashMap::new(),
         types: String::new(),
         cur_self: None,
+        enum_writers: HashSet::new(),
+        enum_eqs: HashSet::new(),
     };
     cg.run(prog);
     if cg.handler.error_count() > before {
@@ -832,6 +840,13 @@ impl<'a, 'h> Cg<'a, 'h> {
     fn find_struct(&mut self, id: &Ident) -> Option<u16> {
         if id.name == "自身" {
             if let Some(s) = self.cur_self {
+                if s >= ENUM_OWNER {
+                    let d = Diagnostic::error(E0201, "`自身` is an enum here, not a struct")
+                        .primary(id.span, format!("`自身` is `{}`", self.owner_name(s)))
+                        .note("inside an `実装` for an enum, `自身` can be used as a type and to name variants, like `自身::無し`");
+                    self.emit(d);
+                    return None;
+                }
                 return Some(s);
             }
             let d = Diagnostic::error(E0201, "cannot find type `自身` in this scope")
@@ -863,8 +878,161 @@ impl<'a, 'h> Cg<'a, 'h> {
         None
     }
 
+    /// Um enum "simples": todos os campos das variantes sao numeros, `真偽`, `文字`,
+    /// `文字列` ou outros enums simples. So esses podem ser mostrados e comparados.
+    fn enum_plain(&self, eid: u16) -> bool {
+        fn go(cg: &Cg<'_, '_>, eid: u16, seen: &mut Vec<u16>) -> bool {
+            if seen.contains(&eid) {
+                // enum que contem a si mesmo: o erro E0620 ja foi dado
+                return true;
+            }
+            seen.push(eid);
+            let ok = cg.enums[eid as usize].variants.iter().all(|v| {
+                v.fields.iter().all(|t| match *t {
+                    Ty::Enum(j) => go(cg, j, seen),
+                    Ty::Err => true,
+                    t => t.is_simple(),
+                })
+            });
+            seen.pop();
+            ok
+        }
+        go(self, eid, &mut Vec::new())
+    }
+
+    /// Escreve (uma vez) a funcao C `nhW<id>` que mostra um valor do enum.
+    fn ensure_enum_writer(&mut self, eid: u16) {
+        if !self.enum_writers.insert(eid) {
+            return;
+        }
+        let variants: Vec<(String, Vec<Ty>)> = self.enums[eid as usize]
+            .variants
+            .iter()
+            .map(|v| (v.name.clone(), v.fields.clone()))
+            .collect();
+        let mut body = String::new();
+        let mut nested: Vec<u16> = Vec::new();
+        body.push_str("switch (v.tag) {\n");
+        for (vi, (name, fields)) in variants.iter().enumerate() {
+            body.push_str(&format!("case {}:\n", vi));
+            if fields.is_empty() {
+                body.push_str(&format!("nh_w_lit(o, \"{}\", {});\n", c_escape(name), name.len()));
+            } else {
+                body.push_str(&format!("nh_w_lit(o, \"{}(\", {});\n", c_escape(name), name.len() + 1));
+                for (fi, t) in fields.iter().enumerate() {
+                    if fi > 0 {
+                        body.push_str("nh_w_lit(o, \", \", 2);\n");
+                    }
+                    let x = format!("v.u.v{}.f{}", vi, fi);
+                    let call = match *t {
+                        t if t.is_signed() => format!("nh_w_i64(o, {});", x),
+                        t if t.is_int() => format!("nh_w_u64(o, {});", x),
+                        Ty::F32 => format!("nh_w_f32(o, {});", x),
+                        Ty::F64 => format!("nh_w_f64(o, {});", x),
+                        Ty::Bool => format!("nh_w_bool(o, {});", x),
+                        Ty::Char => format!("nh_w_char(o, {});", x),
+                        Ty::Str => format!("nh_w_str(o, {});", x),
+                        Ty::Enum(j) => {
+                            nested.push(j);
+                            format!("nhW{}(o, {});", j, x)
+                        }
+                        _ => String::new(),
+                    };
+                    body.push_str(&call);
+                    body.push('\n');
+                }
+                body.push_str("nh_w_lit(o, \")\", 1);\n");
+            }
+            body.push_str("break;\n");
+        }
+        body.push_str("}\n");
+        let head = format!("static void nhW{}(nh_out *o, nhE{} v)", eid, eid);
+        self.protos.push_str(&format!("{};\n", head));
+        self.defs.push_str(&format!("{} {{\n{}}}\n\n", head, body));
+        for j in nested {
+            self.ensure_enum_writer(j);
+        }
+    }
+
+    /// Escreve (uma vez) a funcao C `nhQ<id>` que compara dois valores do enum.
+    fn ensure_enum_eq(&mut self, eid: u16) {
+        if !self.enum_eqs.insert(eid) {
+            return;
+        }
+        let variants: Vec<Vec<Ty>> = self.enums[eid as usize]
+            .variants
+            .iter()
+            .map(|v| v.fields.clone())
+            .collect();
+        let mut body = String::new();
+        let mut nested: Vec<u16> = Vec::new();
+        body.push_str("if (a.tag != b.tag) return 0;\nswitch (a.tag) {\n");
+        for (vi, fields) in variants.iter().enumerate() {
+            if fields.is_empty() {
+                continue;
+            }
+            let mut conds: Vec<String> = Vec::new();
+            for (fi, t) in fields.iter().enumerate() {
+                let x = format!("a.u.v{}.f{}", vi, fi);
+                let y = format!("b.u.v{}.f{}", vi, fi);
+                conds.push(match *t {
+                    Ty::Str => format!("nh_str_cmp({}, {}) == 0", x, y),
+                    Ty::Enum(j) => {
+                        nested.push(j);
+                        format!("nhQ{}({}, {})", j, x, y)
+                    }
+                    _ => format!("{} == {}", x, y),
+                });
+            }
+            body.push_str(&format!("case {}: return {};\n", vi, conds.join(" && ")));
+        }
+        body.push_str("default: return 1;\n}\n");
+        let head = format!("static int nhQ{}(nhE{} a, nhE{} b)", eid, eid, eid);
+        self.protos.push_str(&format!("{};\n", head));
+        self.defs.push_str(&format!("{} {{\n{}}}\n\n", head, body));
+        for j in nested {
+            self.ensure_enum_eq(j);
+        }
+    }
+
+    /// O tipo dono de um bloco `実装`: uma struct ou um enum.
+    fn owner_ty(&self, owner: u16) -> Ty {
+        if owner >= ENUM_OWNER {
+            Ty::Enum(owner - ENUM_OWNER)
+        } else {
+            Ty::Struct(owner)
+        }
+    }
+
+    fn owner_name(&self, owner: u16) -> String {
+        if owner >= ENUM_OWNER {
+            self.enums[(owner - ENUM_OWNER) as usize].name.clone()
+        } else {
+            self.structs[owner as usize].name.clone()
+        }
+    }
+
+    fn owner_kind(&self, owner: u16) -> &'static str {
+        if owner >= ENUM_OWNER {
+            "enum"
+        } else {
+            "struct"
+        }
+    }
+
+    /// O enum chamado `name` (`自身` e o enum do bloco `実装`, se for um).
+    fn enum_by_name(&self, name: &str) -> Option<u16> {
+        if name == "自身" {
+            return self.cur_self.filter(|s| *s >= ENUM_OWNER).map(|s| s - ENUM_OWNER);
+        }
+        self.enum_ids.get(name).copied()
+    }
+
     fn resolve_base(&mut self, t: &Type) -> Ty {
         if t.name == "自身" {
+            if let Some(s) = self.cur_self {
+                return self.owner_ty(s);
+            }
             let id = Ident { name: t.name.clone(), span: t.span };
             return match self.find_struct(&id) {
                 Some(s) => Ty::Struct(s),
@@ -1069,10 +1237,23 @@ impl<'a, 'h> Cg<'a, 'h> {
     fn sig_parts(&mut self, f: &FnItem, owner: Option<u16>) -> (Vec<(Ty, Span)>, Ty) {
         let mut params = Vec::new();
         if let (Some(sp), Some(id)) = (&f.self_param, owner) {
-            let ty = match sp.kind {
-                SelfKind::Value => Ty::Struct(id),
-                SelfKind::Ref => Ty::Ref(id, false),
-                SelfKind::RefMut => Ty::Ref(id, true),
+            let ty = if id >= ENUM_OWNER {
+                if sp.kind != SelfKind::Value {
+                    let d = Diagnostic::error(E0999, "references to enums are not supported yet")
+                        .primary(sp.span, "this method borrows `自分`")
+                        .note("references only point to structs for now, so a method of an enum takes `自分` by value (enums are copied when passed around)")
+                        .help("write `自分` without `&`");
+                    self.emit(d);
+                    Ty::Err
+                } else {
+                    Ty::Enum(id - ENUM_OWNER)
+                }
+            } else {
+                match sp.kind {
+                    SelfKind::Value => Ty::Struct(id),
+                    SelfKind::Ref => Ty::Ref(id, false),
+                    SelfKind::RefMut => Ty::Ref(id, true),
+                }
             };
             params.push((ty, sp.span));
         } else if let Some(sp) = &f.self_param {
@@ -1233,17 +1414,28 @@ impl<'a, 'h> Cg<'a, 'h> {
             match item {
                 Item::Struct(_) | Item::Enum(_) => {}
                 Item::Impl(imp) => {
-                    if self.enum_ids.contains_key(&imp.ty.name) {
-                        let d = Diagnostic::error(E0999, "`実装` for enums is not supported yet")
-                            .primary(imp.ty.span, "this is an enum")
-                            .note("methods on enums arrive in a later slice; `実装` works on structs for now");
-                        self.emit(d);
-                        continue;
-                    }
-                    let Some(id) = self.find_struct(&imp.ty) else { continue };
+                    let id = if let Some(&eid) = self.enum_ids.get(&imp.ty.name) {
+                        ENUM_OWNER + eid
+                    } else {
+                        let Some(id) = self.find_struct(&imp.ty) else { continue };
+                        id
+                    };
                     let saved = self.cur_self.replace(id);
                     for f in &imp.fns {
                         let (params, ret) = self.sig_parts(f, Some(id));
+                        if id >= ENUM_OWNER && self.variant_index(id - ENUM_OWNER, &f.name.name).is_some() {
+                            let d = Diagnostic::error(
+                                E0203,
+                                format!(
+                                    "`{}` is already a variant of `{}`",
+                                    f.name.name, imp.ty.name
+                                ),
+                            )
+                            .primary(f.name.span, "same name as a variant")
+                            .help("choose another name: `形::名前` would be ambiguous");
+                            self.emit(d);
+                            continue;
+                        }
                         let key = (id, f.name.name.clone());
                         if let Some(first) = self.methods.get(&key) {
                             let d = Diagnostic::error(
@@ -1341,7 +1533,11 @@ impl<'a, 'h> Cg<'a, 'h> {
                 }
                 Item::Struct(_) | Item::Enum(_) => {}
                 Item::Impl(imp) => {
-                    let Some(&id) = self.struct_ids.get(&imp.ty.name) else {
+                    let id = if let Some(&eid) = self.enum_ids.get(&imp.ty.name) {
+                        ENUM_OWNER + eid
+                    } else if let Some(&sid) = self.struct_ids.get(&imp.ty.name) {
+                        sid
+                    } else {
                         continue;
                     };
                     for f in &imp.fns {
@@ -2382,8 +2578,13 @@ impl<'a, 'h> Cg<'a, 'h> {
                 }
             }
             ExprKind::Match { scrut, arms } => self.gen_match(scrut, arms, expect, span),
-            ExprKind::AssocPath { ty, name } if self.enum_ids.contains_key(&ty.name) => {
-                let eid = self.enum_ids[&ty.name];
+            ExprKind::AssocPath { ty, name }
+                if self.enum_by_name(&ty.name).map_or(false, |eid| {
+                    self.variant_index(eid, &name.name).is_some()
+                        || !self.methods.contains_key(&(ENUM_OWNER + eid, name.name.clone()))
+                }) =>
+            {
+                let eid = self.enum_by_name(&ty.name).unwrap_or(0);
                 self.gen_variant(eid, name, None, span)
             }
             ExprKind::AssocPath { ty, name } => {
@@ -2661,7 +2862,7 @@ impl<'a, 'h> Cg<'a, 'h> {
             d = d.help("compare the fields one by one, for example `a.x == b.x`");
         }
         if let (Ty::Enum(_), true) = (l.ty, l.ty == r.ty) {
-            d = d.help("examine it with `照合` (shougou, \"match\") instead");
+            d = d.help("enums can be compared with `==` and `!=` only, and only when no variant holds a struct; examine it with `照合` (shougou, \"match\") instead");
         }
         if l.ty.is_num() && r.ty.is_num() {
             d = d.help(format!(
@@ -2736,6 +2937,17 @@ impl<'a, 'h> Cg<'a, 'h> {
             };
         }
         let eq = matches!(op, BinOp::Eq | BinOp::Ne);
+        if let (true, Ty::Enum(a), Ty::Enum(b)) = (eq, l.ty, r.ty) {
+            if a == b && self.enum_plain(a) {
+                self.ensure_enum_eq(a);
+                let neg = if op == BinOp::Ne { "!" } else { "" };
+                return Val {
+                    c: format!("({}nhQ{}({}, {}))", neg, a, l.c, r.c),
+                    ty: Ty::Bool,
+                    span,
+                };
+            }
+        }
         let ok = l.ty == r.ty && l.ty.is_simple() && (eq || l.ty != Ty::Bool);
         if !ok {
             self.bad_binary(op, &l, &r, span);
@@ -2959,19 +3171,31 @@ impl<'a, 'h> Cg<'a, 'h> {
             self.emit(d);
             return self.err_val(span);
         }
-        if let Some(&eid) = self.enum_ids.get(&ty.name) {
-            return self.gen_variant(eid, name, Some(args), span);
-        }
-        let Some(id) = self.find_struct(ty) else {
-            self.gen_args_only(args);
-            return self.err_val(span);
+        let id = if let Some(eid) = self.enum_by_name(&ty.name) {
+            if self.variant_index(eid, &name.name).is_some()
+                || !self.methods.contains_key(&(ENUM_OWNER + eid, name.name.clone()))
+            {
+                return self.gen_variant(eid, name, Some(args), span);
+            }
+            ENUM_OWNER + eid
+        } else {
+            let Some(id) = self.find_struct(ty) else {
+                self.gen_args_only(args);
+                return self.err_val(span);
+            };
+            id
         };
         let key = (id, name.name.clone());
         let Some(sig) = self.methods.get(&key) else {
-            let sname = self.structs[id as usize].name.clone();
+            let sname = self.owner_name(id);
             let mut d = Diagnostic::error(
                 E0202,
-                format!("no function named `{}` found for struct `{}`", name.name, sname),
+                format!(
+                    "no function named `{}` found for {} `{}`",
+                    name.name,
+                    self.owner_kind(id),
+                    sname
+                ),
             )
             .primary(name.span, "not found");
             let cands: Vec<String> = self
@@ -3232,12 +3456,17 @@ impl<'a, 'h> Cg<'a, 'h> {
         args: &[Expr],
         span: Span,
     ) -> Val {
-        let sname = self.structs[id as usize].name.clone();
+        let sname = self.owner_name(id);
         let key = (id, name.name.clone());
         let Some(sig) = self.methods.get(&key) else {
             let mut d = Diagnostic::error(
                 E0613,
-                format!("no method named `{}` found for struct `{}`", name.name, sname),
+                format!(
+                    "no method named `{}` found for {} `{}`",
+                    name.name,
+                    self.owner_kind(id),
+                    sname
+                ),
             )
             .primary(name.span, "method not found");
             let cands: Vec<String> = self
@@ -3267,6 +3496,11 @@ impl<'a, 'h> Cg<'a, 'h> {
             self.gen_args_only(args);
             return self.err_val(span);
         };
+        if id >= ENUM_OWNER && kind != SelfKind::Value {
+            // o erro ja foi dado na assinatura do metodo
+            self.gen_args_only(args);
+            return self.err_val(span);
+        }
         let recv_val = match kind {
             SelfKind::Value => match r.ty {
                 Ty::Ref(..) => Val {
@@ -3517,7 +3751,7 @@ impl<'a, 'h> Cg<'a, 'h> {
                 (CPat::Range(a, b), format!("({} >= {} && {} {} {})", path, ac, path, op, bc))
             }
             PatKind::Variant { ty: tname, name, fields } => {
-                let Some(&eid) = self.enum_ids.get(&tname.name) else {
+                let Some(eid) = self.enum_by_name(&tname.name) else {
                     let d = if self.struct_ids.contains_key(&tname.name) {
                         Diagnostic::error(E0641, format!("expected an enum, found struct `{}`", tname.name))
                             .primary(tname.span, "this is a struct")
@@ -3739,6 +3973,9 @@ impl<'a, 'h> Cg<'a, 'h> {
         if let Ty::Struct(id) | Ty::Ref(id, _) = r.ty {
             return self.gen_user_method(id, r, ri, recv, name, args, span);
         }
+        if let Ty::Enum(eid) = r.ty {
+            return self.gen_user_method(ENUM_OWNER + eid, r, ri, recv, name, args, span);
+        }
         for a in args {
             let _ = self.gen_expr(a, None);
         }
@@ -3925,13 +4162,22 @@ impl<'a, 'h> Cg<'a, 'h> {
         let mut vals: Vec<Val> = Vec::new();
         for a in fmt_args {
             let v = self.gen_expr(a, None);
-            if matches!(v.ty, Ty::Struct(_) | Ty::Ref(..) | Ty::Enum(_)) {
+            let enum_ok = matches!(v.ty, Ty::Enum(e) if self.enum_plain(e));
+            if matches!(v.ty, Ty::Struct(_) | Ty::Ref(..) | Ty::Enum(_)) && !enum_ok {
+                let is_enum = matches!(v.ty, Ty::Enum(_));
                 let d = Diagnostic::error(
                     E0629,
                     format!("{} cannot be shown with `{{}}`", self.bt(v.ty)),
                 )
-                .primary(a.span, "structs and enums have no text form yet")
-                .help(if matches!(v.ty, Ty::Enum(_)) {
+                .primary(
+                    a.span,
+                    if is_enum {
+                        "a variant of this enum holds a struct, which has no text form yet"
+                    } else {
+                        "structs have no text form yet"
+                    },
+                )
+                .help(if is_enum {
                     "examine it with `照合` (shougou, \"match\") and show what you find"
                 } else {
                     "show the fields one by one, for example `表示!(\"{}\", p.x)` (hyouji!)"
@@ -3984,6 +4230,13 @@ impl<'a, 'h> Cg<'a, 'h> {
                     flush_lit(&mut pending, &mut ops, sink);
                     let v = &vals[vi];
                     vi += 1;
+                    if let Ty::Enum(eid) = v.ty {
+                        if self.enum_plain(eid) {
+                            self.ensure_enum_writer(eid);
+                            ops.push(format!("nhW{}({}, {});", eid, sink, v.c));
+                        }
+                        continue;
+                    }
                     let f = match v.ty {
                         t if t.is_signed() => "i64",
                         t if t.is_int() => "u64",
