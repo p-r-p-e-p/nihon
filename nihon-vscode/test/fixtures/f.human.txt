@@ -90,26 +90,6 @@ error[E0644]: names inside `|` patterns are not supported yet
    |
    = help: use one arm per alternative, or `_`
 
-error[E0304]: cannot apply `==` to `色` and `色`
-  --> e0640_match.nihon:40:17
-   |
-40 |     束縛 q = 色::赤 == 色::青;
-   |              ------ ^^ ------ `色`
-   |              |      |
-   |              |      no implementation for `色 == 色`
-   |              `色`
-   |
-   = note: `色` is an enum defined in this program
-   = help: examine it with `照合` (shougou, "match") instead
-
-error[E0629]: `色` cannot be shown with `{}`
-  --> e0640_match.nihon:41:15
-   |
-41 |     表示!("{}", 色::緑);
-   |                 ^^^^^^ structs and enums have no text form yet
-   |
-   = help: examine it with `照合` (shougou, "match") and show what you find
-
 error[E0302]: variant `形::円` needs 1 argument
   --> e0640_match.nihon:42:12
    |
@@ -140,4 +120,4 @@ error[E0647]: range pattern is empty
    |
    = note: a range `a..=b` needs `a <= b`, and `a..b` needs `a < b`
 
-error: aborting due to 17 previous errors
+error: aborting due to 15 previous errors

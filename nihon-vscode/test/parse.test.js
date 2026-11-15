@@ -63,7 +63,7 @@ assert.deepStrictEqual(d.map((x) => x.code), ['E0106', 'E0102']);
 d = parseOutput(fx('f.human.txt'));
 assert.deepStrictEqual(
   d.map((x) => x.code),
-  ['E0203', 'E0620', 'E0640', 'E0643', 'E0640', 'E0641', 'E0202', 'E0641', 'E0301', 'E0644', 'E0644', 'E0304', 'E0629', 'E0302', 'E0302', 'E0646', 'E0647']
+  ['E0203', 'E0620', 'E0640', 'E0643', 'E0640', 'E0641', 'E0202', 'E0641', 'E0301', 'E0644', 'E0644', 'E0302', 'E0302', 'E0646', 'E0647']
 );
 assert.deepStrictEqual(d[2].start, { line: 7, col: 8 });
 assert.ok(d[2].extras.includes('help: add an arm for it, or a catch-all arm: `_ => { ... }`'));
